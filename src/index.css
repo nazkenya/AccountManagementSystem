@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Optional: emergency gradient utility in case classes fail (can be removed later) */
+.hero-gradient-fallback {
+	background: linear-gradient(135deg, #6366F1, #2E3048 55%, #EC4899);
+}
+
+/* Enforce Sora globally in case Tailwind config isn't picked up immediately */
+html, body {
+  font-family: 'Sora', ui-sans-serif, system-ui, sans-serif;
+}
