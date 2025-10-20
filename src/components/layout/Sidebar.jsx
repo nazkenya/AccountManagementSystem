@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   FaHome,
@@ -15,6 +15,7 @@ import {
   FaQuestionCircle,
   FaCog,
   FaSignOutAlt,
+  FaFirefoxBrowser,
 } from 'react-icons/fa'
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
@@ -39,11 +40,19 @@ const MENU = {
   [ROLES.viewer]: [
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
   ],
+  // Untuk manager: ganti list biasa menjadi 1 menu "Update" dengan subMenu
   [ROLES.manager]: [
-    { to: '/customers', label: 'Pelanggan', icon: FaUsers },
-    { to: '/ecrm-workspace', label: 'ECRM Workspace', icon: FaChartLine },
-    { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
-    { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
+    {
+      label: 'Update Data',
+      icon: FaFirefoxBrowser, 
+      
+      subMenu: [
+        { to: '/customers', label: 'Pelanggan', icon: FaUsers },
+        { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
+        { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
+        { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
+      ],
+    },
   ],
 }
 
@@ -52,8 +61,18 @@ export default function Sidebar() {
   const roleItems = MENU[role] || []
   const items = [...MENU.base, ...roleItems]
 
+  // state untuk menyimpan open/close tiap menu yang punya subMenu
+  const [openMenus, setOpenMenus] = useState(() => {
+    // default semua tertutup
+    return {}
+  })
+
+  const toggleMenu = (label) => {
+    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }))
+  }
+
   return (
-  <nav className="fixed left-0 top-0 w-[260px] h-[100dvh] bg-[#0F162A] text-white/80 flex flex-col py-4 shrink-0 overflow-hidden z-40">
+    <nav className="fixed left-0 top-0 w-[260px] h-[100dvh] bg-[#0F162A] text-white/80 flex flex-col py-4 shrink-0 overflow-hidden z-40">
       {/* Brand Row */}
       <div className="px-4 mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -61,8 +80,8 @@ export default function Sidebar() {
             M
           </div>
           <div className="leading-tight">
-            <div className="text-white font-semibold">MyTEnS</div>
-            <div className="text-white/50 text-[11px]">GoBeyond</div>
+            <div className="text-white font-semibold">AMS</div>
+            <div className="text-white/50 text-[11px]">Account Management System</div>
           </div>
         </div>
         <FaChevronDown className="text-white/50" />
@@ -81,6 +100,55 @@ export default function Sidebar() {
       {/* Navigation */}
       <ul className="flex-1 mt-1">
         {items.map((item) => {
+          // jika item memiliki subMenu -> render sebagai collapsible menu
+          if (item.subMenu && Array.isArray(item.subMenu)) {
+            const isOpen = !!openMenus[item.label]
+            const ParentIcon = item.icon
+            return (
+              <li key={item.label} className="mx-3 my-1">
+                <button
+                  onClick={() => toggleMenu(item.label)}
+                  className={`w-full group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+                    isOpen ? 'bg-white/10 border border-white/10 text-white' : 'hover:bg-white/5 text-white/75 hover:text-white'
+                  }`}
+                >
+                  <ParentIcon className="w-5 h-5 text-white/75 group-hover:text-white" />
+                  <span className="text-[14px]">{item.label}</span>
+                  <FaChevronDown
+                    className={`ml-auto w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'} text-white/60`}
+                  />
+                </button>
+
+                {/* submenu */}
+                <ul className={`mt-1 ${isOpen ? 'block' : 'hidden'}`}>
+                  {item.subMenu.map((sub) => {
+                    const Icon = sub.icon
+                    // gunakan NavLink untuk submenu agar active class jalan
+                    return (
+                      <li key={sub.label} className="mx-2 my-1">
+                        <NavLink
+                          to={sub.to}
+                          className={({ isActive }) =>
+                            `group flex items-center gap-3 ml-6 px-3 py-2 rounded-lg text-sm transition-colors ${
+                              isActive
+                                ? 'bg-white/10 border border-white/10 text-white'
+                                : 'hover:bg-white/5 text-white/75 hover:text-white'
+                            }`
+                          }
+                          end={sub.to === '/'}
+                        >
+                          <Icon className="w-4.5 h-4.5 text-white/75 group-hover:text-white" />
+                          <span className="text-[13.5px]">{sub.label}</span>
+                        </NavLink>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            )
+          }
+
+          // default render (item biasa tanpa subMenu)
           const Icon = item.icon
           const showBadge = item.label === 'Aktivitas'
           return (
