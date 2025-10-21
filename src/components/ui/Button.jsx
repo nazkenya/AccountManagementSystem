@@ -14,6 +14,7 @@ export default function Button({
   size = 'md',
   fullWidth = false,
   isLoading = false,
+  type = 'button',
   className = '',
   ...props
 }) {
@@ -58,6 +59,7 @@ export default function Button({
       ].join(' ').trim()}
       aria-busy={isLoading || undefined}
       disabled={isLoading || props.disabled}
+      type={type}
       {...props}
     >
       {isLoading && spinner}

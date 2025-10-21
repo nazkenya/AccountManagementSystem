@@ -2,11 +2,14 @@ import React from 'react'
 import ReactQuill from 'react-quill-new'
 import 'react-quill-new/dist/quill.snow.css'
 
-export default function RichTextEditor({ value = '', onChange, readOnly = false }) {
+function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
   const quillRef = React.useRef(null)
   const imageInputRef = React.useRef(null)
   const fileInputRef = React.useRef(null)
   const [selectedImage, setSelectedImage] = React.useState(null)
+  // Keep latest onChange without causing callbacks to re-create
+  const onChangeRef = React.useRef(onChange)
+  React.useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   const handleImage = React.useCallback(() => {
     if (readOnly) return
@@ -33,7 +36,7 @@ export default function RichTextEditor({ value = '', onChange, readOnly = false 
       quill.insertEmbed(range ? range.index : 0, 'image', reader.result, 'user')
       quill.setSelection((range ? range.index : 0) + 1, 0)
       // emit change
-      onChange && onChange(quill.root.innerHTML)
+      onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
     }
     reader.readAsDataURL(file)
   }
@@ -57,7 +60,7 @@ export default function RichTextEditor({ value = '', onChange, readOnly = false 
       const index = range ? range.index : 0
       quill.clipboard.dangerouslyPasteHTML(index, linkHtml)
       quill.setSelection(index + linkHtml.length, 0)
-      onChange && onChange(quill.root.innerHTML)
+      onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
     }
     reader.readAsDataURL(file)
   }
@@ -69,7 +72,7 @@ export default function RichTextEditor({ value = '', onChange, readOnly = false 
     const table = quill.getModule('table')
     if (table && typeof table.insertTable === 'function') {
       table.insertTable(2, 2)
-      onChange && onChange(quill.root.innerHTML)
+      onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
       return
     }
     // Fallback: paste a simple HTML table
@@ -78,8 +81,8 @@ export default function RichTextEditor({ value = '', onChange, readOnly = false 
     const index = range ? range.index : 0
     quill.clipboard.dangerouslyPasteHTML(index, html)
     quill.setSelection(index + 1, 0)
-    onChange && onChange(quill.root.innerHTML)
-  }, [onChange])
+    onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
+  }, [])
 
   const modules = React.useMemo(() => (
     readOnly
@@ -208,6 +211,13 @@ export default function RichTextEditor({ value = '', onChange, readOnly = false 
     </div>
   )
 }
+
+// Prevent unnecessary re-renders: only update when value or readOnly changes
+const areEqual = (prevProps, nextProps) => (
+  prevProps.value === nextProps.value && prevProps.readOnly === nextProps.readOnly
+)
+
+export default React.memo(RichTextEditorImpl, areEqual)
 
 function SetToolbarTitles() {
   React.useEffect(() => {

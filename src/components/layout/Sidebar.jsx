@@ -30,6 +30,7 @@ const MENU = {
     { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
     { to: '/partnership', label: 'Partnership', icon: FaHandshake },
     { to: '/aktivitas', label: 'Aktivitas', icon: FaChartLine },
+    { to: '/ecrm-workspace', label: 'ECRM Workspace', icon: FaChartLine },
   ],
   [ROLES.sales]: [
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
@@ -41,9 +42,9 @@ const MENU = {
   ],
   [ROLES.manager]: [
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
-    { to: '/ecrm-workspace', label: 'ECRM Workspace', icon: FaChartLine },
     { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
     { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
+    { to: '/manager/account-managers', label: 'Account Managers', icon: FaUsers },
   ],
 }
 

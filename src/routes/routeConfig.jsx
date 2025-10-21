@@ -7,7 +7,10 @@ import Login from '../pages/Login'
 import EcrmWorkspace from '../pages/EcrmWorkspace'
 import ValidationPage from '../pages/ValidationPage'
 import AccountProfile from '../pages/AccountProfile'
+import SalesPlanDetail from '../pages/SalesPlanDetail'
 import { ROLES } from '../auth/roles'
+import ManagerDashboard from '../pages/ManagerDashboard'
+import AccountManagers from '../pages/AccountManagers'
 
 // Define routes and which roles can access them.
 // Add your new role to the arrays below as needed.
@@ -18,10 +21,15 @@ export const routes = [
   // Protected routes
   { path: '/', element: <Dashboard />, roles: [ROLES.admin, ROLES.sales, ROLES.viewer, ROLES.manager] },
   { path: '/customers', element: <CustomersPage />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
-  { path: '/customers/:id', element: <CustomerDetail />, roles: [ROLES.sales] },
-  { path: '/customers/:id/account-profile', element: <AccountProfile />, roles: [ROLES.sales] },
-  { path: '/ecrm-workspace', element: <EcrmWorkspace />, roles: [ROLES.manager] },
-  { path: '/ecrm-workspace/validation', element: <ValidationPage />, roles: [ROLES.manager] },
+  { path: '/customers/:id', element: <CustomerDetail />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
+  { path: '/customers/:id/sales-plan/:planId', element: <SalesPlanDetail />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
+  { path: '/customers/:id/account-profile', element: <AccountProfile />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
+  // ECRM workspace is admin-only
+  { path: '/ecrm-workspace', element: <EcrmWorkspace />, roles: [ROLES.admin] },
+  { path: '/ecrm-workspace/validation', element: <ValidationPage />, roles: [ROLES.admin] },
+  // Manager specific tracking dashboard
+  { path: '/manager', element: <ManagerDashboard />, roles: [ROLES.manager] },
+  { path: '/manager/account-managers', element: <AccountManagers />, roles: [ROLES.manager] },
   // Examples for future pages:
   // { path: '/produk', element: <ProdukPage />, roles: [ROLES.admin, ROLES.manager] },
   // { path: '/monitoring', element: <MonitoringPage />, roles: [ROLES.admin, ROLES.manager] },

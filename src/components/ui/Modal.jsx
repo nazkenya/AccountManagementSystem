@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function Modal({ open, onClose, title, children, footer }) {
+export default function Modal({ open, onClose, title, children, footer, panelClassName = '' }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50">
@@ -10,7 +10,7 @@ export default function Modal({ open, onClose, title, children, footer }) {
         aria-hidden
       />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl ring-1 ring-neutral-200 overflow-hidden animate-slide-up">
+        <div className={`w-full ${panelClassName || 'max-w-md'} bg-white rounded-2xl shadow-2xl ring-1 ring-neutral-200 overflow-hidden animate-slide-up`}>
           <div className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between">
             <h3 className="text-base font-semibold text-neutral-900">{title}</h3>
             <button
