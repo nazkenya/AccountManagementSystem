@@ -30,7 +30,7 @@ export default function Login() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#E60012] to-[#B00010] shadow-xl mb-4">
             <span className="text-3xl font-bold text-white">M</span>
           </div>
-          <h1 className="text-3xl font-semibold text-neutral-800 mb-2">MyTEnS GoBeyond</h1>
+          <h1 className="text-3xl font-semibold text-neutral-800 mb-2">Account Management System</h1>
           <p className="text-neutral-500">Telkom Enterprise Solution</p>
         </div>
 

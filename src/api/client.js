@@ -1,4 +1,5 @@
 // Optional: centralize API calls. In dev, use Vite proxy with relative /api paths.
+
 const base = import.meta.env.VITE_API_BASE || ''
 
 export async function api(path, options = {}) {
@@ -11,3 +12,7 @@ export async function api(path, options = {}) {
   const ct = res.headers.get('content-type') || ''
   return ct.includes('application/json') ? res.json() : res.text()
 }
+
+export default api;
+
+
