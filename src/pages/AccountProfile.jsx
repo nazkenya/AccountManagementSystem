@@ -5,10 +5,12 @@ import Button from '../components/ui/Button'
 import PageHeader from '../components/ui/PageHeader'
 import Toolbar from '../components/ui/Toolbar'
 import { Badge } from '../components/ui/Badge'
+import Table from '../components/ui/Table'
 import { FaUsers, FaBalanceScale, FaProjectDiagram, FaChartBar, FaBoxOpen } from 'react-icons/fa'
 import { FiEdit, FiBookOpen, FiClock, FiUser, FiPrinter, FiRotateCcw, FiArrowLeft, FiSave, FiPlus, FiTrash2, FiFileText } from 'react-icons/fi'
-import RichTextEditor from '../components/wiki/RichTextEditor'
+import DebouncedRichTextEditor from '../components/wiki/DebouncedRichTextEditor'
 import Select from '../components/ui/Select'
+import FormInput from '../components/ui/FormInput'
 import { Section } from './accountProfile/components/Section'
 import { Field, Group } from './accountProfile/components/Fields'
 import { DebouncedTextInput, DebouncedTextArea, FileInput, ViewOrEdit } from './accountProfile/components/Inputs'
@@ -30,7 +32,12 @@ export default function AccountProfile() {
   picName: '', picTitle: '', picPhone: '', picEmail: '', picBirthPlace: '', picBirthDate: '', picEducation: '', picHobbies: '', relationshipStatus: '', decisionRole: '',
   // New: multiple PICs as cards
   pics: [],
+    // Legacy single fields for Telkom Products & Services (kept for migration)
     productTitle: '', contractDate: '', contractEndDate: '', revenueYTD: '', churnedProduct: '', churnDate: '', churnReason: '', connectivityConfig: '',
+    // New table data for Telkom Products & Services
+    contracts: [], // {id,title,contractDate,endDate}
+    financials: [], // {id,revenueYTD,churnedProduct,churnDate}
+    notesRows: [], // {id,churnReason,connectivityConfig}
     reportDate: '', serviceName: '', hardComplaint: '', urgency: '', slgAchievement: '', problemDescription: '',
     competitorName: '', competitorProduct: '', competitorContractEnd: '', competitorRevenueYTD: '', voiceOfCustomer: '', competitorPerformanceNote: '', competitorStrategy: '',
     fiveForcesEntrants: '', fiveForcesSubstitute: '', fiveForcesBuyer: '', fiveForcesSupplier: '', fiveForcesRivalry: '',
@@ -60,6 +67,35 @@ export default function AccountProfile() {
       }))
     }
   }, [formData, setFormDataRaw])
+
+  // Migrate legacy single Telkom Products & Services fields into new table rows (one-time)
+  React.useEffect(() => {
+    setFormDataRaw(prev => {
+      const updates = { ...prev }
+      // Contracts
+      if (Array.isArray(updates.contracts) && updates.contracts.length === 0 && (updates.productTitle || updates.contractDate || updates.contractEndDate)) {
+        updates.contracts = [{ id: `ctr-${Date.now()}`, title: updates.productTitle || '', contractDate: updates.contractDate || '', endDate: updates.contractEndDate || '' }]
+        // Clear legacy fields to avoid confusion
+        updates.productTitle = ''
+        updates.contractDate = ''
+        updates.contractEndDate = ''
+      }
+      // Financials
+      if (Array.isArray(updates.financials) && updates.financials.length === 0 && (updates.revenueYTD || updates.churnedProduct || updates.churnDate)) {
+        updates.financials = [{ id: `fin-${Date.now()}`, revenueYTD: updates.revenueYTD || '', churnedProduct: updates.churnedProduct || '', churnDate: updates.churnDate || '' }]
+        updates.revenueYTD = ''
+        updates.churnedProduct = ''
+        updates.churnDate = ''
+      }
+      // Notes
+      if (Array.isArray(updates.notesRows) && updates.notesRows.length === 0 && (updates.churnReason || updates.connectivityConfig)) {
+        updates.notesRows = [{ id: `note-${Date.now()}`, churnReason: updates.churnReason || '', connectivityConfig: updates.connectivityConfig || '' }]
+        updates.churnReason = ''
+        updates.connectivityConfig = ''
+      }
+      return updates
+    })
+  }, [setFormDataRaw])
 
   const setField = React.useCallback((key, value) => setFormDataRaw(prev => ({ ...prev, [key]: value })), [setFormDataRaw])
   const { addPic, updatePic, removePic, movePic } = usePics(setFormDataRaw)
@@ -95,6 +131,183 @@ export default function AccountProfile() {
     reader.readAsDataURL(file)
   }, [setField])
 
+  // Row mutation helpers for table sections
+  const updateRow = React.useCallback((key, id, field, value) => {
+    setFormDataRaw(prev => ({
+      ...prev,
+      [key]: (prev[key] || []).map(r => (r.id === id ? { ...r, [field]: value } : r)),
+    }))
+  }, [setFormDataRaw])
+
+  const removeRow = React.useCallback((key, id) => {
+    setFormDataRaw(prev => ({
+      ...prev,
+      [key]: (prev[key] || []).filter(r => r.id !== id),
+    }))
+  }, [setFormDataRaw])
+
+  const addRow = React.useCallback((key, payload) => {
+    if (!payload) return
+    setFormDataRaw(prev => ({
+      ...prev,
+      [key]: [
+        ...(prev[key] || []),
+        { id: `${key}-${Date.now()}`, ...payload },
+      ],
+    }))
+  }, [setFormDataRaw])
+
+  // Small table components
+  const getNonEmptyRows = React.useCallback((rows, keys) => {
+    if (!Array.isArray(rows)) return []
+    return rows.filter(r => keys.some(k => (r?.[k] ?? '').toString().trim() !== ''))
+  }, [])
+  const hasEmptyRow = React.useCallback((rows, keys) => {
+    if (!Array.isArray(rows)) return false
+    return rows.some(r => keys.every(k => (r?.[k] ?? '').toString().trim() === ''))
+  }, [])
+  function ContractTable({ rows = [], isEditing }) {
+    const columns = [
+      { key: 'title', label: 'Project/Product Title' },
+      { key: 'contractDate', label: 'Date of Contract' },
+      { key: 'endDate', label: 'End of Contract' },
+      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
+    ]
+    const displayRows = isEditing
+      ? rows
+      : getNonEmptyRows(rows, ['title', 'contractDate', 'endDate'])
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-neutral-900">Contract</div>
+          {isEditing && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={hasEmptyRow(rows, ['title','contractDate','endDate'])}
+              onClick={() => addRow('contracts', { title: '', contractDate: '', endDate: '' })}
+            >
+              <FiPlus className="w-4 h-4" /> Add
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          data={displayRows}
+          rowKey={(r) => r.id}
+          renderCell={(row, key) => {
+            if (key === 'actions' && isEditing) {
+              return (
+                <Button variant="secondary" size="sm" onClick={() => removeRow('contracts', row.id)}><FiTrash2 /> Delete</Button>
+              )
+            }
+            if (isEditing) {
+              if (key === 'title') return <FormInput size="sm" value={row.title || ''} onChange={(v) => updateRow('contracts', row.id, 'title', v)} placeholder="Enter title" />
+              if (key === 'contractDate') return <FormInput size="sm" type="date" value={row.contractDate || ''} onChange={(v) => updateRow('contracts', row.id, 'contractDate', v)} />
+              if (key === 'endDate') return <FormInput size="sm" type="date" value={row.endDate || ''} onChange={(v) => updateRow('contracts', row.id, 'endDate', v)} />
+            }
+            return row[key] || '—'
+          }}
+          emptyMessage="No contracts"
+        />
+      </div>
+    )
+  }
+
+  function FinancialTable({ rows = [], isEditing }) {
+    const columns = [
+      { key: 'revenueYTD', label: 'Total Revenue YTD (IDR M)' },
+      { key: 'churnedProduct', label: 'Churned Product' },
+      { key: 'churnDate', label: 'Date of Churn' },
+      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
+    ]
+    const displayRows = isEditing
+      ? rows
+      : getNonEmptyRows(rows, ['revenueYTD', 'churnedProduct', 'churnDate'])
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-neutral-900">Financial & Churn</div>
+          {isEditing && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={hasEmptyRow(rows, ['revenueYTD','churnedProduct','churnDate'])}
+              onClick={() => addRow('financials', { revenueYTD: '', churnedProduct: '', churnDate: '' })}
+            >
+              <FiPlus className="w-4 h-4" /> Add
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          data={displayRows}
+          rowKey={(r) => r.id}
+          renderCell={(row, key) => {
+            if (key === 'actions' && isEditing) {
+              return (
+                <Button variant="secondary" size="sm" onClick={() => removeRow('financials', row.id)}><FiTrash2 /> Delete</Button>
+              )
+            }
+            if (isEditing) {
+              if (key === 'revenueYTD') return <FormInput size="sm" type="number" value={row.revenueYTD || ''} onChange={(v) => updateRow('financials', row.id, 'revenueYTD', v)} placeholder="0" />
+              if (key === 'churnedProduct') return <FormInput size="sm" value={row.churnedProduct || ''} onChange={(v) => updateRow('financials', row.id, 'churnedProduct', v)} placeholder="Product" />
+              if (key === 'churnDate') return <FormInput size="sm" type="date" value={row.churnDate || ''} onChange={(v) => updateRow('financials', row.id, 'churnDate', v)} />
+            }
+            return row[key] || '—'
+          }}
+          emptyMessage="No financial records"
+        />
+      </div>
+    )
+  }
+
+  function NotesTable({ rows = [], isEditing }) {
+    const columns = [
+      { key: 'churnReason', label: 'Reason for Churn' },
+      { key: 'connectivityConfig', label: 'Connectivity Configuration' },
+      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
+    ]
+    const displayRows = isEditing
+      ? rows
+      : getNonEmptyRows(rows, ['churnReason', 'connectivityConfig'])
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-neutral-900">Notes</div>
+          {isEditing && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={hasEmptyRow(rows, ['churnReason','connectivityConfig'])}
+              onClick={() => addRow('notesRows', { churnReason: '', connectivityConfig: '' })}
+            >
+              <FiPlus className="w-4 h-4" /> Add
+            </Button>
+          )}
+        </div>
+        <Table
+          columns={columns}
+          data={displayRows}
+          rowKey={(r) => r.id}
+          renderCell={(row, key) => {
+            if (key === 'actions' && isEditing) {
+              return (
+                <Button variant="secondary" size="sm" onClick={() => removeRow('notesRows', row.id)}><FiTrash2 /> Delete</Button>
+              )
+            }
+            if (isEditing) {
+              if (key === 'churnReason') return <FormInput type="textarea" size="sm" rows={2} value={row.churnReason || ''} onChange={(v) => updateRow('notesRows', row.id, 'churnReason', v)} />
+              if (key === 'connectivityConfig') return <FormInput type="textarea" size="sm" rows={2} value={row.connectivityConfig || ''} onChange={(v) => updateRow('notesRows', row.id, 'connectivityConfig', v)} />
+            }
+            return <div className="text-sm whitespace-pre-wrap">{row[key] || '—'}</div>
+          }}
+          emptyMessage="No notes"
+        />
+      </div>
+    )
+  }
+
   // Custom sections (user-defined). We no longer seed defaults; start empty.
   const defaultSections = React.useMemo(() => [], [])
   const defaultIds = React.useMemo(() => new Set(defaultSections.map(s => s.id)), [defaultSections])
@@ -103,6 +316,17 @@ export default function AccountProfile() {
     const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;|\s/g, '')
     return text.length === 0
   }, [])
+
+  // Render helper: if value contains HTML, render as rich HTML; otherwise render plain text preserving line breaks
+  const renderRichOrPlain = React.useCallback((val) => {
+    if (isBlankHtml(val)) return <div className="text-sm text-neutral-500">—</div>
+    const looksHTML = /<\/?[a-z][\s\S]*>/i.test(val)
+    return looksHTML
+      ? <div className="prose prose-neutral max-w-none text-sm" dangerouslySetInnerHTML={{ __html: val }} />
+      : <div className="prose prose-neutral max-w-none text-sm whitespace-pre-wrap">{val}</div>
+  }, [isBlankHtml])
+
+  // Using Field with stacked layout for uniformity across the page
 
   const storageKey = `account-profile:${id}`
   const [sections, setSections, lastEditedSections] = useDebouncedLocalStorage(storageKey, defaultSections.map(s => ({ ...s, html: '' })))
@@ -161,6 +385,11 @@ export default function AccountProfile() {
         return join([initials || null, count ? String(count) : null])
       }
       case 'template-products':
+        // Prefer first contract row summary; fallback to legacy fields
+        if (Array.isArray(formData.contracts) && formData.contracts.length > 0) {
+          const c = formData.contracts[0]
+          return join([c.title, c.endDate])
+        }
         return join([formData.productTitle, formData.contractEndDate])
       case 'template-service':
         return join([formData.serviceName, formData.urgency])
@@ -204,11 +433,12 @@ export default function AccountProfile() {
         }
       >
         <div className="space-y-4">
-          {children(isEditing)}
+          {typeof children === 'function' ? children(isEditing) : children}
         </div>
       </Section>
     )
   }
+
 
   return (
     <div className="animate-fade-in">
@@ -321,11 +551,27 @@ export default function AccountProfile() {
                         </Select>
                       </ViewOrEdit></Field>
                     </Group>
-                    <Group title="Narrative">
-                      <Field idFor="companyOverview" label="Company Overview" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.companyOverview || '—'}</div>}><DebouncedTextArea id="companyOverview" value={formData.companyOverview} onChange={v => setField('companyOverview', v)} rows={4} /></ViewOrEdit></Field>
-                      <Field idFor="visionMission" label="Vision & Mission" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.visionMission || '—'}</div>}><DebouncedTextArea id="visionMission" value={formData.visionMission} onChange={v => setField('visionMission', v)} rows={4} /></ViewOrEdit></Field>
-                      <Field idFor="strategicHighlights" label="Strategic Highlights" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.strategicHighlights || '—'}</div>}><DebouncedTextArea id="strategicHighlights" value={formData.strategicHighlights} onChange={v => setField('strategicHighlights', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="subsidiaries" label="Subsidiaries" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.subsidiaries || '—'}</div>}><DebouncedTextArea id="subsidiaries" value={formData.subsidiaries} onChange={v => setField('subsidiaries', v)} rows={3} /></ViewOrEdit></Field>
+                    <Group title="Narrative" gridClassName="gap-y-6">
+                      <Field idFor="companyOverview" label="Company Overview" className="sm:col-span-2 pb-2 border-b border-neutral-200" stacked>
+                        <ViewOrEdit editing={isEditing} view={renderRichOrPlain(formData.companyOverview)}>
+                          <DebouncedRichTextEditor value={formData.companyOverview} onChange={(html) => setField('companyOverview', html)} />
+                        </ViewOrEdit>
+                      </Field>
+                      <Field idFor="visionMission" label="Vision & Mission" className="sm:col-span-2 py-2 border-b border-neutral-200" stacked>
+                        <ViewOrEdit editing={isEditing} view={renderRichOrPlain(formData.visionMission)}>
+                          <DebouncedRichTextEditor value={formData.visionMission} onChange={(html) => setField('visionMission', html)} />
+                        </ViewOrEdit>
+                      </Field>
+                      <Field idFor="strategicHighlights" label="Strategic Highlights" className="sm:col-span-2 py-2 border-b border-neutral-200" stacked>
+                        <ViewOrEdit editing={isEditing} view={renderRichOrPlain(formData.strategicHighlights)}>
+                          <DebouncedRichTextEditor value={formData.strategicHighlights} onChange={(html) => setField('strategicHighlights', html)} />
+                        </ViewOrEdit>
+                      </Field>
+                      <Field idFor="subsidiaries" label="Subsidiaries" className="sm:col-span-2 pt-2" stacked>
+                        <ViewOrEdit editing={isEditing} view={renderRichOrPlain(formData.subsidiaries)}>
+                          <DebouncedRichTextEditor value={formData.subsidiaries} onChange={(html) => setField('subsidiaries', html)} />
+                        </ViewOrEdit>
+                      </Field>
                     </Group>
                   </>
                 )}
@@ -362,25 +608,13 @@ export default function AccountProfile() {
                   </div>
                 )}
               </TemplateSection>
-
               <TemplateSection secId="template-products" title="Telkom Products & Services" icon={FaBoxOpen}>
                 {(isEditing) => (
-                  <>
-                    <Group title="Contract">
-                      <Field idFor="productTitle" label="Project/Product Title" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.productTitle || '—'}</div>}><DebouncedTextInput id="productTitle" value={formData.productTitle} onChange={v => setField('productTitle', v)} /></ViewOrEdit></Field>
-                      <Field idFor="contractDate" label="Date of Contract"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.contractDate || '—'}</div>}><DebouncedTextInput id="contractDate" type="date" value={formData.contractDate} onChange={v => setField('contractDate', v)} /></ViewOrEdit></Field>
-                      <Field idFor="contractEndDate" label="End of Contract"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.contractEndDate || '—'}</div>}><DebouncedTextInput id="contractEndDate" type="date" value={formData.contractEndDate} onChange={v => setField('contractEndDate', v)} /></ViewOrEdit></Field>
-                    </Group>
-                    <Group title="Financial & Churn">
-                      <Field idFor="revenueYTD" label="Total Revenue YTD (IDR M)"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.revenueYTD || '—'}</div>}><DebouncedTextInput id="revenueYTD" type="number" value={formData.revenueYTD} onChange={v => setField('revenueYTD', v)} /></ViewOrEdit></Field>
-                      <Field idFor="churnedProduct" label="Churned Product"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.churnedProduct || '—'}</div>}><DebouncedTextInput id="churnedProduct" value={formData.churnedProduct} onChange={v => setField('churnedProduct', v)} /></ViewOrEdit></Field>
-                      <Field idFor="churnDate" label="Date of Churn"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.churnDate || '—'}</div>}><DebouncedTextInput id="churnDate" type="date" value={formData.churnDate} onChange={v => setField('churnDate', v)} /></ViewOrEdit></Field>
-                    </Group>
-                    <Group title="Notes">
-                      <Field idFor="churnReason" label="Reason for Churn" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.churnReason || '—'}</div>}><DebouncedTextArea id="churnReason" value={formData.churnReason} onChange={v => setField('churnReason', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="connectivityConfig" label="Connectivity Configuration" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.connectivityConfig || '—'}</div>}><DebouncedTextArea id="connectivityConfig" value={formData.connectivityConfig} onChange={v => setField('connectivityConfig', v)} rows={3} /></ViewOrEdit></Field>
-                    </Group>
-                  </>
+                  <div className="space-y-4">
+                    <ContractTable rows={formData.contracts || []} isEditing={isEditing} />
+                    <FinancialTable rows={formData.financials || []} isEditing={isEditing} />
+                    <NotesTable rows={formData.notesRows || []} isEditing={isEditing} />
+                  </div>
                 )}
               </TemplateSection>
 
@@ -584,7 +818,7 @@ export default function AccountProfile() {
                     />
                   </div>
                 ) : null}
-                <RichTextEditor
+                <DebouncedRichTextEditor
                   value={s.html}
                   onChange={(html) => upsertSectionHtml(s.id, html)}
                   readOnly={!isEditing}

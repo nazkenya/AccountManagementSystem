@@ -1,7 +1,7 @@
 import React from 'react'
 
-export const Field = ({ idFor, label, children, hint, required, className = '' }) => (
-  <div className={`grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3 sm:gap-6 items-start py-2.5 ${className}`}>
+export const Field = ({ idFor, label, children, hint, required, className = '', stacked = false }) => (
+  <div className={`grid ${stacked ? 'grid-cols-1 gap-3' : 'grid-cols-1 sm:grid-cols-[180px_1fr] gap-3 sm:gap-6'} items-start py-2.5 ${className}`}>
     <label htmlFor={idFor} className="text-sm text-neutral-500 font-normal leading-relaxed">
       {label}{required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
@@ -12,7 +12,7 @@ export const Field = ({ idFor, label, children, hint, required, className = '' }
   </div>
 )
 
-export const Group = ({ title, description, children }) => (
+export const Group = ({ title, description, children, gridClassName = '' }) => (
   <div className="space-y-4 pt-5 border-t border-neutral-200 first:pt-0 first:border-t-0">
     {title && (
       <div className="flex items-baseline justify-between mb-1">
@@ -23,7 +23,7 @@ export const Group = ({ title, description, children }) => (
         {description && <div className="text-xs text-neutral-400">{description}</div>}
       </div>
     )}
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 ${gridClassName}`}>
       {children}
     </div>
   </div>

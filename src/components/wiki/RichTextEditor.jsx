@@ -2,12 +2,25 @@ import React from 'react'
 import ReactQuill from 'react-quill-new'
 import 'react-quill-new/dist/quill.snow.css'
 
-function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
+function RichTextEditorImpl({
+  /**
+   * If `value` is provided => controlled mode.
+   * Otherwise => uncontrolled, starting from `initialValue`.
+   * Use controlled mode ONLY if you can guarantee stable updates per keystroke (usually not desired here).
+   */
+  value,
+  initialValue = '',
+  onChange,
+  readOnly = false,
+  onFocus,
+  onBlur,
+}) {
   const quillRef = React.useRef(null)
   const imageInputRef = React.useRef(null)
   const fileInputRef = React.useRef(null)
   const [selectedImage, setSelectedImage] = React.useState(null)
-  // Keep latest onChange without causing callbacks to re-create
+
+  // Keep the latest onChange without recreating the handler
   const onChangeRef = React.useRef(onChange)
   React.useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
@@ -24,10 +37,7 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
   const insertImageFromFile = (file) => {
     if (!file) return
     const maxSize = 2 * 1024 * 1024 // 2MB
-    if (file.size > maxSize) {
-      alert('Image too large. Max 2MB.')
-      return
-    }
+    if (file.size > maxSize) { alert('Image too large. Max 2MB.'); return }
     const reader = new FileReader()
     reader.onload = () => {
       const quill = quillRef.current?.getEditor()
@@ -35,7 +45,6 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
       const range = quill.getSelection(true)
       quill.insertEmbed(range ? range.index : 0, 'image', reader.result, 'user')
       quill.setSelection((range ? range.index : 0) + 1, 0)
-      // emit change
       onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
     }
     reader.readAsDataURL(file)
@@ -44,10 +53,7 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
   const insertAttachmentFromFile = (file) => {
     if (!file) return
     const maxSize = 5 * 1024 * 1024 // 5MB
-    if (file.size > maxSize) {
-      alert('File too large. Max 5MB.')
-      return
-    }
+    if (file.size > maxSize) { alert('File too large. Max 5MB.'); return }
     const reader = new FileReader()
     reader.onload = () => {
       const quill = quillRef.current?.getEditor()
@@ -56,7 +62,6 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
       const href = typeof reader.result === 'string' ? reader.result : ''
       const name = file.name
       const linkHtml = `<a href="${href}" download="${name}" target="_blank" rel="noreferrer">📎 ${name}</a>`
-      // Use clipboard to paste HTML at cursor
       const index = range ? range.index : 0
       quill.clipboard.dangerouslyPasteHTML(index, linkHtml)
       quill.setSelection(index + linkHtml.length, 0)
@@ -68,14 +73,12 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
   const handleInsertTable = React.useCallback(() => {
     const quill = quillRef.current?.getEditor()
     if (!quill) return
-    // Try Quill v2 table module API
     const table = quill.getModule('table')
     if (table && typeof table.insertTable === 'function') {
       table.insertTable(2, 2)
       onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
       return
     }
-    // Fallback: paste a simple HTML table
     const range = quill.getSelection(true)
     const html = '<table class="ql-table"><tbody><tr><td> </td><td> </td></tr><tr><td> </td><td> </td></tr></tbody></table><p><br/></p>'
     const index = range ? range.index : 0
@@ -84,9 +87,10 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
     onChangeRef.current && onChangeRef.current(quill.root.innerHTML)
   }, [])
 
+  // Keep modules stable to avoid re-init on each render
   const modules = React.useMemo(() => (
     readOnly
-      ? { toolbar: false }
+      ? { toolbar: false, history: { delay: 500, maxStack: 100, userOnly: true }, table: true }
       : {
           toolbar: {
             container: [
@@ -113,6 +117,8 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
     'list', 'blockquote', 'link', 'image', 'table',
   ], [])
 
+  const controlled = value !== undefined
+
   return (
     <div className="border border-neutral-200 rounded-xl overflow-hidden">
       {!readOnly && (
@@ -120,13 +126,13 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
           Rich text
         </div>
       )}
+
       <style>{`
         .ql-container.ql-snow { border: 0 !important; }
         .ql-snow .ql-toolbar { border: 0 !important; border-bottom: 1px solid #e5e7eb !important; border-top-left-radius: 12px; border-top-right-radius: 12px; }
-  .ql-editor { min-height: 120px; padding: 10px 12px; }
+        .ql-editor { min-height: 120px; padding: 10px 12px; }
         .ql-editor img { max-width: 100%; height: auto; max-height: 480px; border-radius: 8px; }
         .ql-editor img.rte-selected { outline: 2px solid #2C5CC5; outline-offset: 2px; }
-        /* Toolbar cleanup and alignment */
         .ql-toolbar.ql-snow { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
         .ql-toolbar .ql-formats { margin: 0; display: flex; align-items: center; gap: 4px; }
         .ql-toolbar.ql-snow .ql-picker, .ql-toolbar.ql-snow button { height: 28px; }
@@ -134,36 +140,13 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
         .ql-toolbar.ql-snow .ql-picker-label { border-radius: 6px; display: inline-flex; align-items: center; height: 28px; }
         .ql-toolbar.ql-snow button:hover, .ql-toolbar.ql-snow .ql-picker-label:hover { background: #f3f4f6; }
         .ql-toolbar.ql-snow button.ql-active, .ql-toolbar.ql-snow .ql-picker-label.ql-active { background: #e5e7eb; }
-  .ql-toolbar .ql-stroke { fill: none; stroke: #6b7280; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .ql-toolbar .ql-picker-label .ql-stroke, .ql-toolbar button:hover .ql-stroke { stroke: #374151; }
-        /* No pseudo backgrounds; we'll inject inline SVGs to match Quill Snow icons */
+        .ql-toolbar .ql-stroke { fill: none; stroke: #6b7280; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .ql-toolbar .ql-picker-label .ql-stroke, .ql-toolbar button:hover .ql-stroke { stroke: #374151; }
       `}</style>
-      {/* Ensure tooltips for custom buttons */}
-      {!readOnly && (
-        <SetToolbarTitles quillRef={quillRef} />
-      )}
-      {/* Image size controls when an image is selected */}
-      {!readOnly && selectedImage && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-[#F8FAFF] border-b border-[#CFE0FF]/60 text-xs">
-          <span className="text-neutral-600">Image size:</span>
-          <button type="button" className="px-2 py-1 rounded ring-1 ring-neutral-200 hover:bg-neutral-100" onClick={() => {
-            selectedImage.style.width = '33%'; selectedImage.style.height = 'auto';
-          }}>S</button>
-          <button type="button" className="px-2 py-1 rounded ring-1 ring-neutral-200 hover:bg-neutral-100" onClick={() => {
-            selectedImage.style.width = '50%'; selectedImage.style.height = 'auto';
-          }}>M</button>
-          <button type="button" className="px-2 py-1 rounded ring-1 ring-neutral-200 hover:bg-neutral-100" onClick={() => {
-            selectedImage.style.width = '75%'; selectedImage.style.height = 'auto';
-          }}>L</button>
-          <button type="button" className="px-2 py-1 rounded ring-1 ring-neutral-200 hover:bg-neutral-100" onClick={() => {
-            selectedImage.style.width = '100%'; selectedImage.style.height = 'auto';
-          }}>Full</button>
-          <button type="button" className="px-2 py-1 rounded ring-1 ring-neutral-200 hover:bg-neutral-100" onClick={() => {
-            selectedImage.style.width = ''; selectedImage.style.height = '';
-          }}>Reset</button>
-        </div>
-      )}
-      {/* hidden inputs for uploads */}
+
+      {!readOnly && <SetToolbarTitles />}
+
+      {/* Hidden inputs for uploads */}
       <input
         ref={imageInputRef}
         type="file"
@@ -185,20 +168,24 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
           e.currentTarget.value = ''
         }}
       />
+
       <ReactQuill
         ref={quillRef}
-        theme={readOnly ? null : 'snow'}
+        // IMPORTANT: keep theme *constant* so Quill doesn't re-init when readOnly flips.
+        theme="snow"
         readOnly={readOnly}
-        value={value}
-        onChange={(html) => onChange && onChange(html)}
+        // Controlled vs uncontrolled (never pass both):
+        {...(controlled ? { value } : { defaultValue: initialValue })}
+        onChange={(html) => onChangeRef.current && onChangeRef.current(html)}
         modules={modules}
         formats={formats}
-        placeholder={readOnly ? undefined : "Write here…"}
+        placeholder={readOnly ? undefined : 'Write here…'}
         className="prose prose-neutral max-w-none text-left"
+        onFocus={onFocus}
+        onBlur={onBlur}
         onClick={(e) => {
           if (!(e.target instanceof HTMLElement)) return
           const root = quillRef.current?.getEditor()?.root
-          // Deselect previous
           root?.querySelectorAll('img.rte-selected')?.forEach((el) => el.classList.remove('rte-selected'))
           if (e.target.tagName === 'IMG') {
             e.target.classList.add('rte-selected')
@@ -212,10 +199,10 @@ function RichTextEditorImpl({ value = '', onChange, readOnly = false }) {
   )
 }
 
-// Prevent unnecessary re-renders: only update when value or readOnly changes
-const areEqual = (prevProps, nextProps) => (
-  prevProps.value === nextProps.value && prevProps.readOnly === nextProps.readOnly
-)
+const areEqual = (p, n) =>
+  p.value === n.value &&
+  p.initialValue === n.initialValue &&
+  p.readOnly === n.readOnly
 
 export default React.memo(RichTextEditorImpl, areEqual)
 
@@ -237,7 +224,7 @@ function SetToolbarTitles() {
             tbl.innerHTML = "<svg viewBox='0 0 24 24' width='16' height='16' xmlns='http://www.w3.org/2000/svg'><rect class='ql-stroke' x='3' y='3' width='18' height='18' rx='2' ry='2' fill='none'/><path class='ql-stroke' d='M3 9h18M9 3v18'/></svg>"
           }
         }
-        const chk = el.querySelector('button.ql-list[value="check"]')
+        const chk = el.querySelector('button.ql-list[value=\"check\"]')
         if (chk) {
           chk.setAttribute('title', 'Checklist')
           if (!chk.querySelector('svg')) {
