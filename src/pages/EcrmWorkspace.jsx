@@ -53,6 +53,7 @@ export default function EcrmWorkspace() {
     { key: "lama_menjadi_pro_hire", label: "Lama Menjadi Pro Hire" },
     { key: "tgl_out_sebagai_am", label: "Tgl Out Sebagai AM" },
     { key: "ket_out", label: "Keterangan Out" },
+    { key: "kel_am", label: "Kel AM" },
   ];
 
   // --- helper: baca value field dengan berbagai casing
@@ -71,7 +72,7 @@ export default function EcrmWorkspace() {
     const tableCols = ["id_sales", "nik_am", "nama_am", "tr", "witel"];
     const popCols = POPOVER_FIELDS.map((f) => f.key);
     const fields = Array.from(
-      new Set([...tableCols, ...popCols, "am_aktif_posisi_oktober_2025"])
+      new Set([...tableCols, ...popCols, "am_aktif"])
     ); // include active flag
 
     getAMs(fields)
@@ -125,8 +126,6 @@ export default function EcrmWorkspace() {
 
       // ambil nilai flag aktif (coba beberapa variasi key)
       const rawActive =
-        getFieldValue(m, "AM_AKTIF_POSISI_OKTOBER_2025") ??
-        getFieldValue(m, "am_aktif_posisi_oktober_2025") ??
         getFieldValue(m, "AM_AKTIF") ??
         getFieldValue(m, "am_aktif") ??
         "";
@@ -206,8 +205,6 @@ export default function EcrmWorkspace() {
   // Hitung hanya AM yang aktif (berdasarkan kolom AM_AKTIF_POSISI_OKTOBER_2025)
   const activeFilteredCount = filtered.filter((r) => {
     const val =
-      getFieldValue(r, "AM_AKTIF_POSISI_OKTOBER_2025") ??
-      getFieldValue(r, "am_aktif_posisi_oktober_2025") ??
       getFieldValue(r, "AM_AKTIF") ??
       getFieldValue(r, "am_aktif");
 
@@ -356,7 +353,7 @@ export default function EcrmWorkspace() {
 
   const formatDateMaybe = (val) => {
     if (!val) return "-";
-    const d = new Date(val);
+    const d = new Date(val);                                                                                                                                                      
     if (isNaN(d)) return String(val);
     return d.toLocaleDateString();
   };
@@ -366,12 +363,22 @@ export default function EcrmWorkspace() {
     { key: "id_sales", label: "ID SALES" },
     { key: "nik_am", label: "NIK AM" },
     { key: "nama_am", label: "NAMA AM" },
-    { key: "tr", label: "Region" },
+    { key: "tr", label: "Region" },                                                                                                       
     { key: "witel", label: "Witel" },
+    { key: "notel", label: "No. Telp" },
+    { key: "email", label: "Email" },
+    { key: "level_am", label: "Level AM" },
+    { key: "tgl_aktif", label: "Tgl Aktif" },
+    { key: "update_perpanjangan_kontrak", label: "Update Perpanjangan Kontrak" },
+    { key: "tgl_akhir_kontrak_pro_hire", label: "Tgl Akhir Kontrak Pro Hire" },
+    { key: "lama_menjadi_pro_hire", label: "Lama Menjadi Pro Hire" },
+    { key: "tgl_out_sebagai_am", label: "Tgl Out Sebagai AM" },
+    { key: "ket_out", label: "Keterangan Out" },
+    { key: "am_aktif", label: "AM Aktif" },
     // popover fields
     ...POPOVER_FIELDS,
     // active flag
-    { key: "am_aktif_posisi_oktober_2025", label: "AM Aktif" },
+    { key: "am_aktif", label: "AM Aktif" },
   ];
 
   const handleExport = async () => {
