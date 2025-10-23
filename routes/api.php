@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AMController;
+use App\Http\Controllers\ProfilingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,6 +21,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-
+//API PROFILING & VALIDATION AM
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/am', [AMController::class, 'AmList']);
+Route::get('/ca', [ProfilingController::class, 'caList']);

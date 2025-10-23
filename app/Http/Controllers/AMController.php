@@ -16,8 +16,8 @@ class AMController extends Controller
         'WITEL','witel',
         'TELDA','telda',
         'UPDATED_DATE','updated_date',
-        'AM_AKTIF_POSISI_OKTOBER_2025','am_aktif_posisi_oktober_2025','am_aktif',
-        // kolom popover yang kamu minta
+        'AM_AKTIF','am_aktif','am_aktif',
+        // kolom popover yang kamu mint
         'NOTEL','notel',
         'EMAIL','email',
         'LEVEL_AM','level_am',
@@ -27,6 +27,7 @@ class AMController extends Controller
         'LAMA_MENJADI_PRO_HIRE','lama_menjadi_pro_hire',
         'TGL_OUT_SEBAGAI_AM','tgl_out_sebagai_am',
         'KET_OUT','ket_out',
+        'KEL_AM','kel_am'
     ];
 
     public function AmList(Request $request)
@@ -56,7 +57,7 @@ class AMController extends Controller
                 'NOTEL','EMAIL','LEVEL_AM','TGL_AKTIF',
                 'UPDATE_PERPANJANGAN_KONTRAK','TGL_AKHIR_KONTRAK_PRO_HIRE',
                 'LAMA_MENJADI_PRO_HIRE','TGL_OUT_SEBAGAI_AM','KET_OUT',
-                'AM_AKTIF_POSISI_OKTOBER_2025'
+                'AM_AKTIF','KEL_AM'
             ];
         }
 
