@@ -1,5 +1,3 @@
-// src/components/Sidebar.jsx (Sudah diperbaiki)
-
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
@@ -23,7 +21,6 @@ import {
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
 
-// Define per-role menus. Add items for your new role here.
 const MENU = {
   base: [{ to: '/', label: 'Beranda', icon: FaHome }],
   [ROLES.admin]: [
@@ -43,7 +40,6 @@ const MENU = {
   [ROLES.viewer]: [
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
   ],
-  // Untuk manager: ganti list biasa menjadi 1 menu "Update" dengan subMenu
   [ROLES.manager]: [
     {
       label: 'Update Data',
@@ -52,11 +48,7 @@ const MENU = {
       subMenu: [
         { to: '/customers', label: 'Pelanggan', icon: FaUsers },
         { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
-        
-        // --- PERUBAHAN DI SINI ---
         { to: '/profile/am', label: 'Profile AM', icon: FaUserTie }, // Path diubah ke /profile/am
-        // -------------------------
-
         { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
         { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
       ],
@@ -71,7 +63,6 @@ export default function Sidebar() {
 
   // state untuk menyimpan open/close tiap menu yang punya subMenu
   const [openMenus, setOpenMenus] = useState(() => {
-    // default semua tertutup
     return {}
   })
 
@@ -131,7 +122,6 @@ export default function Sidebar() {
                 <ul className={`mt-1 ${isOpen ? 'block' : 'hidden'}`}>
                   {item.subMenu.map((sub) => {
                     const Icon = sub.icon
-                    // gunakan NavLink untuk submenu agar active class jalan
                     return (
                       <li key={sub.label} className="mx-2 my-1">
                         <NavLink
