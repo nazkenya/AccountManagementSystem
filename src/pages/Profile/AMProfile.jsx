@@ -1,4 +1,4 @@
-// src/pages/EcrmWorkspace.jsx (Sudah dimodifikasi)
+// src/pages/AmProfile.jsx
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -7,26 +7,22 @@ import {
   FaBuilding,
   FaDownload,
   FaFilter,
-  FaShieldAlt,
-  FaArrowRight,
-  FaPlus, // <-- 1. ICON BARU DITAMBAHKAN
+
 } from "react-icons/fa";
-import { getAMs } from "../services/amService";
-import SearchInput from "../components/ui/SearchInput";
-import Table from "../components/ui/Table";
-import Pagination from "../components/ui/Pagination";
-import Card from "../components/ui/Card";
-import StatsCard from "../components/ui/StatsCard";
-import Select from "../components/ui/Select";
-import Button from "../components/ui/Button"; // <-- Anda sudah punya ini
-import PageHeader from "../components/ui/PageHeader";
-import { useNavigate } from "react-router-dom";
+import { getAMs } from "../../services/amService";
+import SearchInput from "../../components/ui/SearchInput";
+import Table from "../../components/ui/Table";
+import Pagination from "../../components/ui/Pagination";
+import Card from "../../components/ui/Card";
+import StatsCard from "../../components/ui/StatsCard";
+import Select from "../../components/ui/Select";
+import Button from "../../components/ui/Button";
+import PageHeader from "../../components/ui/PageHeader";
+// import { useNavigate } from "react-router-dom"; // Tidak dipakai lagi
 
-// 2. IMPORT MODAL BARU DARI DALAM FOLDER
-import InsertAmModal from "./EcrmWorkspace/InsertAmModal"; 
-
-export default function EcrmWorkspace() {
-  const navigate = useNavigate();
+// --- NAMA KOMPONEN DIUBAH ---
+export default function AmProfile() {
+  // const navigate = useNavigate(); // Tidak dipakai lagi
 
   // State data & paging
   const [ams, setAms] = useState([]);
@@ -34,9 +30,6 @@ export default function EcrmWorkspace() {
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
-
-  // 3. STATE BARU UNTUK MODAL
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Hover/popover state
   const wrapperRef = useRef(null);
@@ -50,7 +43,7 @@ export default function EcrmWorkspace() {
   // constant for "no region"
   const NO_REGION_VALUE = "__NO_REGION__";
 
-  // POPOVER FIELDS (Akan kita gunakan untuk modal)
+  // POPOVER FIELDS
   const POPOVER_FIELDS = [
     { key: "notel", label: "No. Telp" },
     { key: "email", label: "Email" },
@@ -203,7 +196,7 @@ export default function EcrmWorkspace() {
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6366F1]/25 via-[#7C3AED]/25 to-[#EC4899]/25 flex items-center justify-center text-[#2E3048] font-semibold text-xs">
             {String(getFieldValue(row, "NAMA_AM") || getFieldValue(row, "nama_am") || "").charAt(0)}
           </div>
-          <span className="font-medium">{getFieldValue(row, "NAMA_AM") || getFieldValue(row, "nama_am")}</span>
+          <span className="font-medium">{getFieldValue(row, "NANA_AM") || getFieldValue(row, "nama_am")}</span>
         </div>
       ),
     },
@@ -360,7 +353,7 @@ export default function EcrmWorkspace() {
     return { top, left };
   };
 
-  const popStyle = calcPopoverStyle();
+const popStyle = calcPopoverStyle();
 
   const formatDateMaybe = (val) => {
     if (!val) return "-";
@@ -406,7 +399,7 @@ export default function EcrmWorkspace() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "AM Export");
 
-    const filenameParts = ["ecrm-ams-export"];
+    const filenameParts = ["am-profile-export"]; // Nama file diubah
     if (filter.region) filenameParts.push(`region-${filter.region}`);
     if (filter.witel) filenameParts.push(`witel-${filter.witel}`);
     if (filter.status) filenameParts.push(`status-${filter.status}`);
@@ -422,8 +415,9 @@ export default function EcrmWorkspace() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         variant="hero"
-        title="ECRM Workspace"
-        subtitle="Kelola dan pantau performa Account Manager di seluruh region"
+        // --- JUDUL DIUBAH ---
+        title="Account Manager Profile"
+        subtitle="Lihat profil dan detail Account Manager di seluruh region"
         icon={FaUserTie}
       />
 
@@ -436,56 +430,7 @@ export default function EcrmWorkspace() {
         ))}
       </div>
 
-      {/* Validation */}
-      <Card className="bg-white">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] text-[#7C3AED] grid place-items-center ring-1 ring-[#7C3AED]/20">
-              <FaShieldAlt className="text-xl" />
-            </div>
-            <div>
-              <h3 className="text-lg md:text-xl font-semibold text-neutral-900">Validate AM Data</h3>
-              <p className="text-sm text-neutral-500 mt-1">
-                Bandingkan dan validasi data AM dari CA terhadap ATM. Hasil validasi akan tampil di halaman khusus.
-              </p>
-            </div>
-          </div>
-          <Button variant="primary" size="lg" className="w-full md:w-auto" onClick={() => navigate("/ecrm-workspace/validation")}>
-            Start Validation
-            <FaArrowRight />
-          </Button>
-        </div>
-      </Card>
-      
-      {/* 4. CARD BARU UNTUK INSERT AM DITAMBAHKAN DI SINI */}
-      <Card className="bg-white">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            {/* Menggunakan icon dan warna yang berbeda agar unik */}
-            <div className="w-12 h-12 rounded-xl bg-[#E0F2FE] text-[#0284C7] grid place-items-center ring-1 ring-[#0284C7]/20">
-              <FaPlus className="text-xl" />
-            </div>
-            <div>
-              <h3 className="text-lg md:text-xl font-semibold text-neutral-900">Insert New AM</h3>
-              <p className="text-sm text-neutral-500 mt-1">
-                Ajukan AM baru untuk proses validasi dan approval oleh Manajer atau Admin.
-              </p>
-            </div>
-          </div>
-          {/* Tombol ini akan membuka modal. Menggunakan style yg sama dg "Start Validation" */}
-          <Button 
-            variant="primary" 
-            size="lg" 
-            className="w-full md:w-auto" 
-            onClick={() => setIsModalOpen(true)}
-          >
-            Insert AM
-            <FaArrowRight />
-          </Button>
-        </div>
-      </Card>
-      {/* ---------------------------------------------------- */}
-
+      {/* --- CARD VALIDASI DIHAPUS --- */}
 
       {/* Filter */}
       <Card className="bg-white">
@@ -504,7 +449,7 @@ export default function EcrmWorkspace() {
 
             <Select
               value={filter.region}
-              onChange={(e) => setFilter((s) => ({ ...s, region: e.target.value }))}
+              onChange={(e) => setFilter((s) => ({ ...s, region: e.targe.value }))}
             >
               <option value="">All Regions</option>
               <option value={NO_REGION_VALUE}>Tidak Ada Regions</option>
@@ -624,15 +569,6 @@ export default function EcrmWorkspace() {
           />
         </div>
       </Card>
-
-      {/* 5. KOMPONEN MODAL BARU DIPANGGIL DI SINI */}
-      <InsertAmModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        fields={POPOVER_FIELDS}
-      />
-      {/* ------------------------------------------- */}
-
     </div>
   );
 }

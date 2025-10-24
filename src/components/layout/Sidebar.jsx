@@ -1,3 +1,5 @@
+// src/components/Sidebar.jsx (Sudah diperbaiki)
+
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
@@ -16,6 +18,7 @@ import {
   FaCog,
   FaSignOutAlt,
   FaFirefoxBrowser,
+  FaUserTie,
 } from 'react-icons/fa'
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
@@ -44,11 +47,16 @@ const MENU = {
   [ROLES.manager]: [
     {
       label: 'Update Data',
-      icon: FaFirefoxBrowser, 
-      
+      icon: FaFirefoxBrowser,
+
       subMenu: [
         { to: '/customers', label: 'Pelanggan', icon: FaUsers },
         { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
+        
+        // --- PERUBAHAN DI SINI ---
+        { to: '/profile/am', label: 'Profile AM', icon: FaUserTie }, // Path diubah ke /profile/am
+        // -------------------------
+
         { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
         { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
       ],
