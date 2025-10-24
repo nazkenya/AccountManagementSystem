@@ -48,7 +48,7 @@ const MENU = {
       subMenu: [
         { to: '/customers', label: 'Pelanggan', icon: FaUsers },
         { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
-        { to: '/profile/am', label: 'Profile AM', icon: FaUserTie }, // Path diubah ke /profile/am
+        { to: '/profile/am', label: 'Profile AM', icon: FaUserTie }, 
         { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
         { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
       ],
@@ -61,7 +61,6 @@ export default function Sidebar() {
   const roleItems = MENU[role] || []
   const items = [...MENU.base, ...roleItems]
 
-  // state untuk menyimpan open/close tiap menu yang punya subMenu
   const [openMenus, setOpenMenus] = useState(() => {
     return {}
   })

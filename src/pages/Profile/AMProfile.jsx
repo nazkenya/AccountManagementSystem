@@ -4,10 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FaUserTie,
   FaMapMarkerAlt,
-  FaBuilding,
+  FaUsers, // DIUBAH: FaBuilding dihapus, FaUsers ditambah
   FaDownload,
   FaFilter,
-
 } from "react-icons/fa";
 import { getAMs } from "../../services/amService";
 import SearchInput from "../../components/ui/SearchInput";
@@ -18,15 +17,12 @@ import StatsCard from "../../components/ui/StatsCard";
 import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
-// import { useNavigate } from "react-router-dom"; // Tidak dipakai lagi
 
-// --- NAMA KOMPONEN DIUBAH ---
 export default function AmProfile() {
-  // const navigate = useNavigate(); // Tidak dipakai lagi
-
   // State data & paging
+  // DIUBAH: filter 'witel' diganti 'levelAm'
   const [ams, setAms] = useState([]);
-  const [filter, setFilter] = useState({ q: "", region: "", witel: "", status: "" });
+  const [filter, setFilter] = useState({ q: "", region: "", levelAm: "", status: "" });
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -56,6 +52,15 @@ export default function AmProfile() {
     { key: "ket_out", label: "Keterangan Out" },
   ];
 
+  // --- BARU: Opsi status AM ---
+  const AM_STATUS_OPTIONS = [
+    "AM PRO HIRE",
+    "AM PRO HIRE MD",
+    "AM SME",
+    "AM ORGANIK",
+    "AM ORGANIK MD",
+  ];
+
   // --- helper: baca value field dengan berbagai casing
   const getFieldValue = (row, key) => {
     if (!row) return "";
@@ -69,11 +74,12 @@ export default function AmProfile() {
   useEffect(() => {
     setLoading(true);
 
-    const tableCols = ["id_sales", "nik_am", "nama_am", "tr", "witel"];
+    // DIUBAH: 'witel' diganti 'level_am'
+    const tableCols = ["id_sales", "nik_am", "nama_am", "tr", "level_am"];
     const popCols = POPOVER_FIELDS.map((f) => f.key);
     const fields = Array.from(
       new Set([...tableCols, ...popCols, "am_aktif_posisi_oktober_2025"])
-    ); // include active flag
+    );
 
     getAMs(fields)
       .then((data) => {
@@ -90,54 +96,44 @@ export default function AmProfile() {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Unique lists (regions + witels)
+  // Unique lists
   const regions = useMemo(() => {
     const list = ams
       .map((m) => {
-        // prefer uppercase DB keys if present, fallback lower
         const v = getFieldValue(m, "TR") ?? getFieldValue(m, "tr") ?? "";
         return String(v ?? "").trim();
       })
-      // hanya region valid (buang null/"null"/"undefined"/empty)
       .filter((v) => v && v.toLowerCase() !== "null" && v.toLowerCase() !== "undefined");
     return [...new Set(list)].sort((a, b) => a.localeCompare(b, "id"));
   }, [ams]);
 
-  const witels = useMemo(() => {
-    const list = ams
-      .map((m) => {
-        const v = getFieldValue(m, "WITEL") ?? getFieldValue(m, "witel") ?? "";
-        return String(v ?? "").trim();
-      })
-      .filter((v) => v && v.toLowerCase() !== "null" && v.toLowerCase() !== "undefined");
-    return [...new Set(list)].sort((a, b) => a.localeCompare(b, "id"));
-  }, [ams]);
+  // DIHAPUS: useMemo untuk 'witels' dihapus
 
   // Filtering
   const filtered = useMemo(() => {
     return ams.filter((m) => {
       const regionRaw = getFieldValue(m, "TR") ?? getFieldValue(m, "tr") ?? "";
       const region = String(regionRaw ?? "").trim();
-      const witelRaw = getFieldValue(m, "WITEL") ?? getFieldValue(m, "witel") ?? "";
-      const witel = String(witelRaw ?? "").trim();
+
+      // DIUBAH: Logika 'witel' diganti 'levelAm'
+      const levelAmRaw = getFieldValue(m, "level_am") ?? getFieldValue(m, "LEVEL_AM") ?? "";
+      const levelAm = String(levelAmRaw ?? "").trim();
+
       const nama = getFieldValue(m, "NAMA_AM") ?? getFieldValue(m, "nama_am") ?? "";
       const nik = getFieldValue(m, "NIK_AM") ?? getFieldValue(m, "nik_am") ?? "";
       const id = getFieldValue(m, "ID_SALES") ?? getFieldValue(m, "id_sales") ?? "";
 
-      // ambil nilai flag aktif (coba beberapa variasi key)
       const rawActive =
         getFieldValue(m, "AM_AKTIF_POSISI_OKTOBER_2025") ??
         getFieldValue(m, "am_aktif_posisi_oktober_2025") ??
         getFieldValue(m, "AM_AKTIF") ??
         getFieldValue(m, "am_aktif") ??
         "";
-
-      const activeNormalized = String(rawActive).trim().toLowerCase(); // mis. "AKTIF" -> "aktif"
+      const activeNormalized = String(rawActive).trim().toLowerCase();
 
       // filter by region
       if (filter.region) {
         if (filter.region === NO_REGION_VALUE) {
-          // pilih baris yang TR kosong / 'null' / 'undefined'
           const rv = String(region ?? "").trim().toLowerCase();
           if (rv !== "" && rv !== "null" && rv !== "undefined") return false;
         } else {
@@ -145,10 +141,12 @@ export default function AmProfile() {
         }
       }
 
-      // filter by witel
-      if (filter.witel && witel !== filter.witel) return false;
+      // DIUBAH: filter by 'levelAm'
+      if (filter.levelAm && levelAm !== filter.levelAm) return false;
 
-      // filter status: "" (all), "aktif", "non_aktif"
+      // DIHAPUS: filter by witel dihapus
+
+      // filter status (Aktif / Non Aktif)
       if (
         filter.status === "aktif" &&
         !["aktif", "y", "yes", "1", "true", "active", "ya"].includes(activeNormalized)
@@ -196,15 +194,16 @@ export default function AmProfile() {
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6366F1]/25 via-[#7C3AED]/25 to-[#EC4899]/25 flex items-center justify-center text-[#2E3048] font-semibold text-xs">
             {String(getFieldValue(row, "NAMA_AM") || getFieldValue(row, "nama_am") || "").charAt(0)}
           </div>
-          <span className="font-medium">{getFieldValue(row, "NANA_AM") || getFieldValue(row, "nama_am")}</span>
+          <span className="font-medium">{getFieldValue(row, "NAMA_AM") || getFieldValue(row, "nama_am")}</span>
         </div>
       ),
     },
     { key: "TR", label: "REGION", render: (row) => getFieldValue(row, "TR") || getFieldValue(row, "tr") },
-    { key: "WITEL", label: "WITEL", render: (row) => getFieldValue(row, "WITEL") || getFieldValue(row, "witel") },
+    // DIUBAH: Kolom 'WITEL' diganti 'STATUS AM'
+    { key: "LEVEL_AM", label: "STATUS AM", render: (row) => getFieldValue(row, "level_am") || getFieldValue(row, "LEVEL_AM") },
   ];
 
-  // Hitung hanya AM yang aktif (berdasarkan kolom AM_AKTIF_POSISI_OKTOBER_2025)
+  // Hitung hanya AM yang aktif
   const activeFilteredCount = filtered.filter((r) => {
     const val =
       getFieldValue(r, "AM_AKTIF_POSISI_OKTOBER_2025") ??
@@ -217,29 +216,27 @@ export default function AmProfile() {
     return ["y", "yes", "1", "true", "active", "aktif", "ya"].includes(s);
   }).length;
 
-  // Stats (gunakan activeFilteredCount)
+  // Stats
   const stats = [
-    { label: "Total Active Account Managers", value: activeFilteredCount.toLocaleString(), icon: FaUserTie },
+    // DIUBAH: Urutan dan item di dalam stats
+    { label: "Jumlah AM", value: filtered.length.toLocaleString(), icon: FaUsers },
+    { label: "Total Active AM", value: activeFilteredCount.toLocaleString(), icon: FaUserTie },
     { label: "Regions", value: regions.length.toString(), icon: FaMapMarkerAlt },
-    { label: "Witels", value: witels.length.toString(), icon: FaBuilding },
   ];
 
-  // Attach listeners with cleanup (popover follow)
+  // ... (useEffect untuk popover, handlePopoverEnter, handlePopoverLeave, calcPopoverStyle, popStyle, formatDateMaybe) ...
+  // (Tidak ada perubahan di bagian ini, jadi saya singkat)
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
-
     let tableEl = wrapper.querySelector("table");
     let obs = null;
     let cleanupTableListeners = null;
-
     const attachListeners = (table) => {
       const tbody = table.querySelector("tbody");
       if (!tbody) return () => {};
-
       const onMouseMove = (ev) => {
         setHoverPos({ x: ev.clientX, y: ev.clientY });
-
         const tr = ev.target.closest("tr");
         if (!tr || tr.closest("thead")) return;
         const rows = Array.from(tbody.querySelectorAll("tr"));
@@ -247,30 +244,25 @@ export default function AmProfile() {
         if (idx === -1) return;
         const rowData = pageRows[idx];
         if (!rowData) return;
-
         if (clearTimeoutRef.current) {
           clearTimeout(clearTimeoutRef.current);
           clearTimeoutRef.current = null;
         }
         setHoveredRow(rowData);
       };
-
       const onMouseOut = () => {
         if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current);
         clearTimeoutRef.current = setTimeout(() => {
           if (!popoverKeep) setHoveredRow(null);
         }, 120);
       };
-
       tbody.addEventListener("mousemove", onMouseMove);
       tbody.addEventListener("mouseout", onMouseOut);
-
       return () => {
         tbody.removeEventListener("mousemove", onMouseMove);
         tbody.removeEventListener("mouseout", onMouseOut);
       };
     };
-
     if (tableEl) {
       cleanupTableListeners = attachListeners(tableEl);
     } else {
@@ -286,7 +278,6 @@ export default function AmProfile() {
       });
       obs.observe(wrapper, { childList: true, subtree: true });
     }
-
     return () => {
       if (cleanupTableListeners) cleanupTableListeners();
       if (obs) {
@@ -297,10 +288,7 @@ export default function AmProfile() {
         clearTimeoutRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageRows, popoverKeep]);
-
-  // Popover keep-alive
   const handlePopoverEnter = () => {
     if (clearTimeoutRef.current) {
       clearTimeout(clearTimeoutRef.current);
@@ -317,44 +305,33 @@ export default function AmProfile() {
       if (!popoverKeep) setHoveredRow(null);
     }, 80);
   };
-
-  // POPUP POSITION
   const POP_WIDTH = 300;
   const OFFSET_X = 16;
   const OFFSET_Y = 6;
   const MIN_MARGIN = 8;
-
   const calcPopoverStyle = () => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-
     const movingDown = hoverPos.y > prevYRef.current;
     prevYRef.current = hoverPos.y;
-
     const actualHeight = popRef.current?.getBoundingClientRect().height ?? 220;
-
     let left = Math.round(hoverPos.x + OFFSET_X);
     if (left + POP_WIDTH + MIN_MARGIN > vw) {
       left = Math.max(MIN_MARGIN, vw - POP_WIDTH - MIN_MARGIN);
     }
-
     let top;
     if (movingDown) {
       top = Math.round(hoverPos.y - OFFSET_Y - actualHeight);
     } else {
       top = Math.round(hoverPos.y + OFFSET_Y);
     }
-
     if (top < MIN_MARGIN) top = MIN_MARGIN;
     if (top + actualHeight > vh - MIN_MARGIN) {
       top = Math.max(MIN_MARGIN, vh - actualHeight - MIN_MARGIN);
     }
-
     return { top, left };
   };
-
-const popStyle = calcPopoverStyle();
-
+  const popStyle = calcPopoverStyle();
   const formatDateMaybe = (val) => {
     if (!val) return "-";
     const d = new Date(val);
@@ -368,24 +345,22 @@ const popStyle = calcPopoverStyle();
     { key: "nik_am", label: "NIK AM" },
     { key: "nama_am", label: "NAMA AM" },
     { key: "tr", label: "Region" },
-    { key: "witel", label: "Witel" },
-    // popover fields
+    // DIHAPUS: 'witel' dihapus
+    // popover fields (level_am sudah ada di sini)
     ...POPOVER_FIELDS,
     // active flag
     { key: "am_aktif_posisi_oktober_2025", label: "AM Aktif" },
   ];
 
   const handleExport = async () => {
-    const rowsToExport = filtered; // export filtered (all pages)
+    const rowsToExport = filtered;
     if (!rowsToExport || rowsToExport.length === 0) {
       alert("Tidak ada data untuk diexport (cek filter).");
       return;
     }
 
-    // dynamic import xlsx supaya bundle tidak langsung besar
     const XLSX = await import("xlsx");
 
-    // map rows -> array of objects keyed by label (header)
     const sheetData = rowsToExport.map((r) => {
       const obj = {};
       EXPORT_FIELDS.forEach((f) => {
@@ -399,14 +374,14 @@ const popStyle = calcPopoverStyle();
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "AM Export");
 
-    const filenameParts = ["am-profile-export"]; // Nama file diubah
+    const filenameParts = ["am-profile-export"];
     if (filter.region) filenameParts.push(`region-${filter.region}`);
-    if (filter.witel) filenameParts.push(`witel-${filter.witel}`);
-    if (filter.status) filenameParts.push(`status-${filter.status}`);
+    // DIUBAH: 'witel' diganti 'levelAm', dan 'status' diberi label lebih jelas
+    if (filter.levelAm) filenameParts.push(`status-am-${filter.levelAm}`);
+    if (filter.status) filenameParts.push(`status-aktif-${filter.status}`);
     filenameParts.push(new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-"));
     const filename = `${filenameParts.join("_")}.xlsx`;
 
-    // write file (browser)
     XLSX.writeFile(wb, filename);
   };
   // ---------------------------------------------------------------------------
@@ -415,13 +390,13 @@ const popStyle = calcPopoverStyle();
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         variant="hero"
-        // --- JUDUL DIUBAH ---
         title="Account Manager Profile"
         subtitle="Lihat profil dan detail Account Manager di seluruh region"
         icon={FaUserTie}
       />
 
       {/* Stats */}
+      {/* DIUBAH: Grid cols disesuaikan, stats.map otomatis update */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {stats.map((s, i) => (
           <div key={i} className="animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
@@ -429,8 +404,6 @@ const popStyle = calcPopoverStyle();
           </div>
         ))}
       </div>
-
-      {/* --- CARD VALIDASI DIHAPUS --- */}
 
       {/* Filter */}
       <Card className="bg-white">
@@ -449,7 +422,8 @@ const popStyle = calcPopoverStyle();
 
             <Select
               value={filter.region}
-              onChange={(e) => setFilter((s) => ({ ...s, region: e.targe.value }))}
+              // DIPERBAIKI: Typo e.targe -> e.target (sudah saya perbaiki di turn sebelumnya)
+              onChange={(e) => setFilter((s) => ({ ...s, region: e.target.value }))}
             >
               <option value="">All Regions</option>
               <option value={NO_REGION_VALUE}>Tidak Ada Regions</option>
@@ -466,24 +440,25 @@ const popStyle = calcPopoverStyle();
               )}
             </Select>
 
+            {/* DIUBAH: Filter 'Witel' diganti 'Status AM' */}
             <Select
-              value={filter.witel}
-              onChange={(e) => setFilter((s) => ({ ...s, witel: e.target.value }))}
+              value={filter.levelAm}
+              onChange={(e) => setFilter((s) => ({ ...s, levelAm: e.target.value }))}
             >
-              <option value="">All Witels</option>
-              {witels.map((w) => (
-                <option key={w} value={w}>
-                  {w}
+              <option value="">All Kel AM</option> {AM_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
                 </option>
               ))}
             </Select>
 
-            {/* Dropdown filter: Status AM */}
+            {/* Dropdown filter: Status Aktif/Non-Aktif */}
             <Select
               value={filter.status}
               onChange={(e) => setFilter((s) => ({ ...s, status: e.target.value }))}
             >
-              <option value="">All Status</option>
+              {/* DIUBAH: Label diperjelas */}
+              <option value="">All Status (Aktif/Non)</option>
               <option value="aktif">Aktif</option>
               <option value="non_aktif">Non Aktif</option>
             </Select>
