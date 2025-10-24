@@ -24,28 +24,22 @@ import DataTableWithPagination from "../../components/ui/DataTableWithPagination
 export default function ValidationPanel() {
   const navigate = useNavigate();
 
-  // Tab state: ATM | CA | TEMP | LOG
   const [activeTab, setActiveTab] = useState("ATM");
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  // Data stores
   const [atm, setAtm] = useState([]);
   const [ca, setCa] = useState([]);
   const [temp, setTemp] = useState([]);
   const [log, setLog] = useState([]);
 
-  // validation state
-  const [state, setState] = useState("idle"); // idle | validating | success | error
-
-  // Selection state for TEMP
+  const [state, setState] = useState("idle");
   const [selectedTemp, setSelectedTemp] = useState(() => new Set());
 
-  // helpers for keys (same as you used)
   const getKey = (row) => {
     const nik = row?.nik_am?.trim?.();
-    const id = row?.id_sales?.trim?.();
+    const id = row?.id_sales?.toString?.().trim?.();
     if (nik) return `nik:${nik}`;
     if (id) return `id:${id}`;
     if (row?.ts) return `ts:${row.ts}`;
@@ -86,18 +80,24 @@ export default function ValidationPanel() {
     });
   };
 
-  // Initial load: ATM + CA (CA endpoint should exist; if not, CA can be mocked)
+  // initial load: ATM, CA, TEMP, LOG
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        // fetchATM should call getAMs() internally
-        const [atmData, caData] = await Promise.all([fetchATM(), fetchCA()]);
+        const [atmData, caData, tempData, logData] = await Promise.all([
+          fetchATM(),
+          fetchCA(),
+          fetchTEMP(),
+          fetchLOG(),
+        ]);
         if (!mounted) return;
         setAtm(Array.isArray(atmData) ? atmData : []);
         setCa(Array.isArray(caData) ? caData : []);
+        setTemp(Array.isArray(tempData) ? tempData : []);
+        setLog(Array.isArray(logData) ? logData : []);
       } catch (err) {
-        console.error("Error loading ATM/CA", err);
+        console.error("Initial load error:", err);
       }
     })();
     return () => {
@@ -105,32 +105,28 @@ export default function ValidationPanel() {
     };
   }, []);
 
-  // Helper to refresh TEMP & LOG from backend (used after runValidateAM or commit)
+  // helper to refresh TEMP & LOG (callable from actions)
   const refreshTempAndLog = useCallback(async () => {
     try {
       const [t, l] = await Promise.all([fetchTEMP(), fetchLOG()]);
       setTemp(Array.isArray(t) ? t : []);
       setLog(Array.isArray(l) ? l : []);
-    } catch (err) {
-      console.error("refreshTempAndLog error", err);
+    } catch (e) {
+      console.error("refreshTempAndLog error", e);
     }
   }, []);
 
-  // Run validation: call backend to import-from-ncrm and then fetch TEMP/LOG
+  // run validation (still calls backend import then refresh temp/log)
   const handleValidateAM = useCallback(async () => {
     setState("validating");
     try {
-      // runValidateAM should call backend endpoint and return { temp, log } normalized OR we call import then fetch
-      const res = await runValidateAM("manager"); // pass user if needed
-      // If runValidateAM returns normalized temp/log:
+      const res = await runValidateAM("manager");
       if (res && Array.isArray(res.temp)) {
         setTemp(res.temp);
       } else {
-        // fallback: fetch
         await refreshTempAndLog();
       }
       if (res?.log) {
-        // prepend log entry
         setLog((prev) => (res.log ? [res.log, ...prev] : prev));
       }
       setSelectedTemp(new Set());
@@ -142,36 +138,27 @@ export default function ValidationPanel() {
     }
   }, [refreshTempAndLog]);
 
-  // Generate / commit selected TEMP rows into AM master
+  // commit selected TEMP rows
   const handleGenerate = useCallback(
     async (user = "manager") => {
       setState("validating");
       try {
         const toInsert = temp.filter((t) => {
           const k = getKey(t);
-          return k && selectedTemp.has(k) && (t.status === "tidak valid" || t.status === "invalid" || !t.status);
+          return k && selectedTemp.has(k);
         });
-
         if (toInsert.length === 0) {
           setState("idle");
           return;
         }
-
-        // Grab ids (prefer id_sales or nik) for backend commit
-        // Adjust payload shape to your backend / commit endpoint
-        const ids = toInsert.map((r) => r.ID_SALES ?? r.id_sales ?? r.nik_am ?? r.NIK_AM ?? null).filter(Boolean);
-
-        // call backend commit endpoint
-        const commitRes = await generateCommit(user, ids); // expects backend endpoint to handle commit
-        // After commit, refresh ATM and TEMP/LOG
-        const [atmData] = await Promise.all([fetchATM(), refreshTempAndLog()]);
+        const ids = toInsert.map((r) => r.id_sales ?? r.ID_SALES ?? r.nik_am ?? r.NIK_AM).filter(Boolean);
+        const commitRes = await generateCommit(user, ids);
+        // refresh ATM, TEMP, LOG
+        const atmData = await fetchATM();
         setAtm(Array.isArray(atmData) ? atmData : atm);
-        setTemp([]); // assume commit moved them
+        await refreshTempAndLog();
         setSelectedTemp(new Set());
-        // Add commit log to UI if backend returned something useful
-        if (commitRes) {
-          setLog((prev) => (commitRes.entry ? [commitRes.entry, ...prev] : prev));
-        }
+        if (commitRes?.entry) setLog((prev) => [commitRes.entry, ...prev]);
         setActiveTab("ATM");
         setState("success");
       } catch (err) {
@@ -179,18 +166,17 @@ export default function ValidationPanel() {
         setState("error");
       }
     },
-    [temp, selectedTemp, refreshTempAndLog]
+    [temp, selectedTemp, refreshTempAndLog, atm]
   );
 
-  // Scoped views (filtering)
+  // scoped lists
   const tempScoped = useMemo(() => {
-    let scoped = temp.filter((t) => t.status === "tidak valid" || t.status === "invalid" || !t.status);
-    if (!filter) return scoped;
+    if (!filter) return temp;
     const q = filter.toLowerCase();
-    return scoped.filter(
+    return temp.filter(
       (t) =>
         (t.nik_am || "").toLowerCase().includes(q) ||
-        (t.id_sales || "").toLowerCase().includes(q) ||
+        (t.id_sales || "").toString().toLowerCase().includes(q) ||
         (t.nama_am || "").toLowerCase().includes(q)
     );
   }, [temp, filter]);
@@ -220,10 +206,13 @@ export default function ValidationPanel() {
   const logScoped = useMemo(() => {
     if (!filter) return log;
     const q = filter.toLowerCase();
-    return log.filter((t) => (t.actor || "").toLowerCase().includes(q) || (t.action || "").toLowerCase().includes(q));
+    return log.filter(
+      (t) =>
+        ((t.log_user || t.LOG_USER || "") + " " + (t.actor || "") + " " + (t.action || "")).toLowerCase().includes(q)
+    );
   }, [log, filter]);
 
-  // Progress calculation using diffCAtoATM
+  // progress
   const comparison = useMemo(() => diffCAtoATM(ca, atm), [ca, atm]);
   const totalCA = ca.length;
   const validCount = comparison.valid.length;
@@ -248,7 +237,7 @@ export default function ValidationPanel() {
     };
   }, [hasTemp, selectedCount, handleValidateAM, handleGenerate]);
 
-  // Table column definitions
+  // columns definitions (adjusted for DB fields)
   const atmCols = [
     { key: "nik_am", label: "NIK", sortable: true },
     { key: "id_sales", label: "ID Sales", sortable: true },
@@ -256,32 +245,36 @@ export default function ValidationPanel() {
     { key: "region", label: "Region" },
     { key: "witel", label: "Witel" },
   ];
-  
-  const caCols = [
-  { key: 'nik_am', label: 'NIK', sortable: true },
-//{ key: 'id_sales', label: 'ID Sales', sortable: true },
-  { key: 'nama_am', label: 'Nama', sortable: true },
-  { key: 'region', label: 'Region' },
-  { key: 'witel', label: 'Witel' },
-  { key: 'created_at', label: 'Created At' },
-];
 
+  const caCols = [
+    { key: "nik_am", label: "NIK", sortable: true },
+    { key: "nama_am", label: "Nama", sortable: true },
+    { key: "region", label: "Region" },
+    { key: "witel", label: "Witel" },
+    { key: "created_at", label: "Created At" },
+  ];
+
+  // TEMP: columns to match your temp_profeling table (STATUS_APPROVED)
   const tempCols = [
     { key: "__select__", label: "", className: "w-10" },
     { key: "nik_am", label: "NIK", sortable: true },
     { key: "id_sales", label: "ID Sales", sortable: true },
     { key: "nama_am", label: "Nama", sortable: true },
-    { key: "sumber", label: "Sumber", sortable: true },
-    { key: "status", label: "Status", sortable: true },
-    { key: "ts", label: "Timestamp", sortable: true },
+    { key: "region", label: "Region" },
+    { key: "witel", label: "Witel" },
+    { key: "status_approved", label: "Status Approved" },
+    { key: "created_at", label: "Created At" },
   ];
 
+  // LOG columns
   const logCols = [
-    { key: "actor", label: "Actor" },
-    { key: "action", label: "Action" },
-    { key: "count", label: "Count" },
-    { key: "duration_ms", label: "Duration (ms)" },
-    { key: "ts", label: "Timestamp" },
+    { key: "id_sales", label: "ID SALES" },
+    { key: "nik_am", label: "NIK" },
+    { key: "nama_am", label: "NAMA" },
+    { key: "region", label: "REGION" },
+    { key: "witel", label: "WITEL" },
+    { key: "log_user", label: "Log User" },
+    { key: "work_log", label: "Work Log" },
   ];
 
   const renderTempCell = (row, key) => {
@@ -290,15 +283,13 @@ export default function ValidationPanel() {
       const checked = k ? selectedTemp.has(k) : false;
       return <input type="checkbox" disabled={!k} checked={checked} onChange={() => toggleTempSelected(row)} />;
     }
-    if (key === "status") {
-      return <Badge variant={row.status === "valid" ? "success" : "danger"}>{row.status}</Badge>;
+    if (key === "status_approved") {
+      return <Badge variant={row.status_approved === "APPROVED" ? "success" : "neutral"}>{row.status_approved ?? "-"}</Badge>;
     }
-    return row[key];
+    return row[key] ?? row?.raw?.[key] ?? "-";
   };
 
-  const tabData =
-    activeTab === "ATM" ? atmScoped : activeTab === "CA" ? caScoped : activeTab === "TEMP" ? tempScoped : logScoped;
-
+  const tabData = activeTab === "ATM" ? atmScoped : activeTab === "CA" ? caScoped : activeTab === "TEMP" ? tempScoped : logScoped;
   const columns = activeTab === "ATM" ? atmCols : activeTab === "CA" ? caCols : activeTab === "TEMP" ? tempCols : logCols;
 
   const total = tabData.length;
@@ -335,12 +326,7 @@ export default function ValidationPanel() {
         <UiToolbar className="justify-between">
           <div className="flex items-center gap-2">
             {cta && (
-              <Button
-                variant={cta.variant || "primary"}
-                onClick={cta.onClick}
-                disabled={state === "validating" || cta.disabled}
-                className="inline-flex items-center gap-2"
-              >
+              <Button variant={cta.variant || "primary"} onClick={cta.onClick} disabled={state === "validating" || cta.disabled} className="inline-flex items-center gap-2">
                 {cta.label}
               </Button>
             )}
@@ -375,9 +361,7 @@ export default function ValidationPanel() {
         setRowsPerPage={setRowsPerPage}
         searchValue={filter}
         onSearchChange={setFilter}
-        searchPlaceholder={
-          activeTab === "TEMP" ? "Cari di TEMP" : activeTab === "CA" ? "Cari di CA" : activeTab === "ATM" ? "Cari di ATM" : "Cari log"
-        }
+        searchPlaceholder={activeTab === "TEMP" ? "Cari di TEMP" : activeTab === "CA" ? "Cari di CA" : activeTab === "ATM" ? "Cari di ATM" : "Cari log"}
         headerRight={
           activeTab === "TEMP" ? (
             <div className="flex items-center gap-3">
