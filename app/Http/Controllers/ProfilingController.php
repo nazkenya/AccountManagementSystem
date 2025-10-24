@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class ProfilingController extends Controller
 {
@@ -11,7 +12,7 @@ class ProfilingController extends Controller
     public function caList(Request $request)
     {
         // Raw SQL -- menggunakan WITH + ROW_NUMBER untuk ambil row terbaru per ACCOUNT_TEAM_NIK
-        // Pastikan sintaks cocok dengan Oracle DB kamu. Sesuaikan nama kolom/tabel jika perlu.
+        // Pastikan sintaks cocok dengan Oracle DB. Sesuaikan nama kolom/tabel jika perlu.
         $sql = <<<SQL
 WITH tes AS (
   SELECT 
@@ -48,7 +49,7 @@ SQL;
             // Gunakan DB::select untuk raw query
             $rows = DB::select(DB::raw($sql));
 
-            // DEBUG: kalau mau lihat di log (komen jika tidak perlu)
+            // DEBUG: kalau mau lihat di log
             Log::debug('CA rows fetched: count=' . count($rows));
             if (count($rows) > 0) {
                 Log::debug('CA first row sample: ' . json_encode($rows[0]));
@@ -61,4 +62,5 @@ SQL;
             return response()->json(['error' => 'Query failed', 'message' => $e->getMessage()], 500);
         }
     }
+    
 }

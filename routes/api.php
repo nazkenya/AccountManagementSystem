@@ -5,6 +5,9 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AMController;
 use App\Http\Controllers\ProfilingController;
+use App\Http\Controllers\TempProfilingController;
+use App\Http\Controllers\LogProfilingController;
+use App\Http\Controllers\CommitProfilingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,3 +28,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/am', [AMController::class, 'AmList']);
 Route::get('/ca', [ProfilingController::class, 'caList']);
+Route::get('/profiling/temp', [TempProfilingController::class, 'temp_t']);
+Route::get('/profiling/log', [LogProfilingController::class, 'log_i']);
+Route::post('/profiling/import-from-ncrm', [ImportFromNcrmController::class, 'store']);
+Route::post('/profiling/commit', [CommitProfilingController::class, 'store']);
