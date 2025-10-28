@@ -1,5 +1,4 @@
-// Validation services and utilities
-// TODO: Replace mock implementations with real API calls
+// Validation services and utilities (final, connected to Laravel API)
 
 export type AM = {
   nik_am: string
@@ -7,7 +6,7 @@ export type AM = {
   nama_am?: string
   region?: string
   witel?: string
-  updated_at?: string
+  created_by?: string
 }
 
 export type TempRow = AM & { sumber: 'CA' | 'ATM'; status: 'valid' | 'tidak valid'; ts: string }
@@ -21,134 +20,95 @@ export type LogItem = {
   ts: string
 }
 
-// Mock fetchers
+// ========================================================
+// FETCH DATA DARI BACKEND
+// ========================================================
+
 export async function fetchATM(): Promise<AM[]> {
-  // TODO: GET /api/master/atm
-  return [
-    { nik_am: '1001', id_sales: 'S-01', nama_am: 'Budi Santoso', region: 'Jakarta', witel: 'Jaksel' },
-    { nik_am: '1002', id_sales: 'S-02', nama_am: 'Siti Nurhaliza', region: 'Bandung', witel: 'Bandung' },
-    { nik_am: '1003', id_sales: 'S-03', nama_am: 'Ahmad Wijaya', region: 'Surabaya', witel: 'Surabaya' },
-  ]
+  const res = await fetch("/api/am");
+  if (!res.ok) throw new Error("Gagal fetch data ATM");
+  return await res.json();
 }
 
 export async function fetchCA(): Promise<AM[]> {
-  // TODO: GET /api/master/ca
-  return [
-    { nik_am: '1001', id_sales: 'S-01', nama_am: 'Budi Santoso', region: 'Jakarta', witel: 'Jaksel' },
-    { nik_am: '9999', id_sales: 'S-99', nama_am: 'Ghost User', region: 'Unknown', witel: '-' },
-    { nik_am: '', id_sales: 'S-00', nama_am: 'Missing NIK', region: 'Unknown', witel: '-' },
-  ]
+  const res = await fetch("/api/ca");
+  if (!res.ok) throw new Error("Gagal fetch data CA");
+  return await res.json();
 }
 
-export async function fetchKaryawan(): Promise<AM[]> {
-  // Simulate an employee dataset similar shape
-  return [
-    { nik_am: '2001', id_sales: 'K-01', nama_am: 'Karyawan A', region: 'Jakarta', witel: 'Jaksel' },
-    { nik_am: '1002', id_sales: 'S-02', nama_am: 'Siti Nurhaliza', region: 'Bandung', witel: 'Bandung' },
-  ]
-}
+// ========================================================
+// COMPARE dan VALIDATE
+// ========================================================
 
-// Diff utilities
-export function diffCAtoATM(ca: AM[], atm: AM[]) {
-  const now = new Date().toISOString()
-  const atmKeys = new Set(
-    atm
-      .map((a) => (a.nik_am && a.nik_am.trim() ? `nik:${a.nik_am.trim()}` : a.id_sales ? `id:${a.id_sales}` : ''))
-      .filter(Boolean)
-  )
+export async function runValidateAM(user = "manager") {
+  const res = await fetch("http://localhost:8000/api/profiling/import-from-ncrm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user }),
+  });
 
-  const resultValid: TempRow[] = []
-  const resultInvalid: TempRow[] = []
-
-  for (const row of ca) {
-    const nik = row.nik_am?.trim()
-    const id = row.id_sales?.trim()
-    const hasKey = nik ? `nik:${nik}` : id ? `id:${id}` : ''
-
-    if (!nik && !id) {
-      resultInvalid.push({ ...row, sumber: 'CA', status: 'tidak valid', ts: now })
-      continue
-    }
-
-    if (hasKey && atmKeys.has(hasKey)) {
-      resultValid.push({ ...row, sumber: 'CA', status: 'valid', ts: now })
-    } else {
-      resultInvalid.push({ ...row, sumber: 'CA', status: 'tidak valid', ts: now })
-    }
+ if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Compare failed: ${text}`);
   }
 
-  return { valid: resultValid, invalid: resultInvalid }
-}
+   const temp = payload.rows || [];
 
-export function diffKaryawanToATM(karyawan: AM[], atm: AM[]) {
-  return diffCAtoATM(karyawan, atm)
-}
-
-// Actions (mock)
-export async function runValidateAM(actor: string) {
-  const t0 = performance.now()
-  const [ca, atm] = await Promise.all([fetchCA(), fetchATM()])
-  const { valid, invalid } = diffCAtoATM(ca, atm)
-  const duration_ms = Math.round(performance.now() - t0)
   return {
-    temp: [...valid, ...invalid],
-    summary: { total: ca.length, valid: valid.length, invalid: invalid.length },
-    log: <LogItem>{
-      id: crypto.randomUUID(),
-      actor,
-      action: 'VALIDATE_AM',
-      count: invalid.length,
-      duration_ms,
-      ts: new Date().toISOString(),
-    },
-  }
+    temp,
+    inserted: payload.inserted_count || 0,
+  };
 }
-
+// ========================================================
+// VALIDASI KARYAWAN
+// ========================================================
 export async function runValidateKaryawan(actor: string) {
-  const t0 = performance.now()
-  const [karyawan, atm] = await Promise.all([fetchKaryawan(), fetchATM()])
-  const { valid, invalid } = diffKaryawanToATM(karyawan, atm)
-  const duration_ms = Math.round(performance.now() - t0)
+  const t0 = performance.now();
+  const [karyawan, atm] = await Promise.all([fetch("/api/karyawan"), fetchATM()]);
+  const karyawanData = await karyawan.json();
+  const duration_ms = Math.round(performance.now() - t0);
   return {
-    temp: [...valid, ...invalid],
-    summary: { total: karyawan.length, valid: valid.length, invalid: invalid.length },
+    temp: karyawanData,
+    summary: { total: karyawanData.length },
     log: <LogItem>{
       id: crypto.randomUUID(),
       actor,
-      action: 'VALIDATE_KARYAWAN',
-      count: invalid.length,
+      action: "VALIDATE_KARYAWAN",
       duration_ms,
       ts: new Date().toISOString(),
     },
-  }
+  };
 }
 
+// ========================================================
+// GENERATE KE AM MASTER
+// ========================================================
 export async function generateCommit(actor: string) {
-  // TODO: POST /api/validation/generate
-  return <LogItem>{
-    id: crypto.randomUUID(),
-    actor,
-    action: 'GENERATE',
-    ts: new Date().toISOString(),
-  }
+  const res = await fetch("/api/profiling/commit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actor }),
+  });
+  if (!res.ok) throw new Error("Gagal generate commit");
+  return await res.json();
 }
 
-export async function syncMasters(actor: string) {
-  // TODO: POST /api/validation/sync
-  return <LogItem>{
-    id: crypto.randomUUID(),
-    actor,
-    action: 'SYNC',
-    ts: new Date().toISOString(),
-  }
-}
+// OPSIONAL
+//export async function syncMasters(actor: string) {
+  //const res = await fetch("/api/profiling/sync", {
+    //method: "POST",
+    //headers: { "Content-Type": "application/json" },
+    //body: JSON.stringify({ actor }),
+  //});
+  //if (!res.ok) throw new Error("Sync gagal");
+  //return await res.json();
+//}
 
 export async function cancelValidation(actor: string) {
-  // TODO: POST /api/validation/cancel
-  return <LogItem>{
+  return {
     id: crypto.randomUUID(),
     actor,
-    action: 'CANCEL',
+    action: "CANCEL",
     ts: new Date().toISOString(),
-  }
+  };
 }

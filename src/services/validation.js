@@ -3,14 +3,17 @@ import axios from "axios";
 
 const API_BASE_FULL = "http://localhost:8000/api"; // pastikan sesuai backend
 const apiAxios = axios.create({
-  baseURL: API_BASE_FULL,
-  timeout: 15000,
+ baseURL: API_BASE_FULL,
 });
+async function fetchJson(url) {
+ const res = await fetch(url);
+ if (!res.ok) {
+   const txt = await res.text();
+ throw new Error(txt || `HTTP ${res.status}`);
+ }
+ return res.json();
+}
 
-/** -------------------------
- * Helper getAMs (axios) used by fetchATM
- * Accepts optional fields array which will be sent as query param `fields`
- * ------------------------- */
 export async function getAMs(fields = null) {
   try {
     const qs = fields && fields.length ? `?fields=${encodeURIComponent(fields.join(","))}` : "";
@@ -26,7 +29,7 @@ export async function getAMs(fields = null) {
 }
 
 /** -------------------------
- * fetchATM: normalisasi hasil /am jadi shape mudah dipakai UI
+ * fetchATM - endpoint /api/am
  * ------------------------- */
 export async function fetchATM(fields = null) {
   try {
@@ -62,7 +65,6 @@ export async function fetchATM(fields = null) {
 
 /** -------------------------
  * fetchCA - endpoint /api/ca
- * Normalize hasil supaya punya keys: nik_am, nama_am, region, witel, created_at
  * ------------------------- */
 export async function fetchCA() {
   try {
@@ -85,7 +87,6 @@ export async function fetchCA() {
 
 /** -------------------------
  * fetchTEMP - GET /api/profiling/temp
- * Normalize keys: ID_SALES,NIK_AM,NAMA_AM,REGION,WITEL,STATUS_APPROVED,created_at
  * ------------------------- */
 export async function fetchTEMP() {
   try {
@@ -101,6 +102,7 @@ export async function fetchTEMP() {
         region: get("REGION") ?? get("region") ?? "",
         witel: get("WITEL") ?? get("witel") ?? "",
         status_approved: get("STATUS_APPROVED") ?? get("status_approved") ?? null,
+        created_by: get("CREATED_BY") ?? get("created_by") ?? "manager",
         created_at: get("CREATED_AT") ?? get("created_at") ?? get("TS") ?? null,
         raw: r,
       };
@@ -144,27 +146,40 @@ export async function fetchLOG() {
  * POST /api/profiling/import-from-ncrm then fetch TEMP & LOG
  * return { temp, log } where temp is normalized as above
  * ------------------------- */
-export async function runValidateAM(user = "system") {
+export async function runValidateAM(user = "manager") {
   try {
-    // call backend import endpoint (it inserts into TEMP and LOG)
-    await apiAxios.post("/profiling/import-from-ncrm", { user });
+    const resp = await apiAxios.post("/profiling/import-from-ncrm", { user });
+    
+    const payload = resp.data;
 
-    // pull fresh TEMP & LOG
-    const [tempRaw, logRaw] = await Promise.all([fetchTEMP(), fetchLOG()]);
+    if (payload.success === false) {  
+        throw new Error(`Import failed: ${payload.message || 'Check Laravel log for details'}`);
+    }
+        const temp = (payload.rows || []).map((r) => {
+        const get = (k) => r[k] ?? r[k?.toUpperCase?.()] ?? r[k?.toLowerCase?.()] ?? null;
+        
+        return {
+            id_sales: get("ID_SALES") ?? get("id_sales") ?? null,
+            nik_am: get("NIK_AM") ?? get("nik_am") ?? "",
+            nama_am: get("NAMA_AM") ?? get("nama_am") ?? "",
+            region: get("REGION") ?? get("region") ?? "",
+            witel: get("WITEL") ?? get("witel") ?? "",
+            status_approved: get("STATUS_APPROVED") ?? get("status_approved") ?? 'PENDING', 
+            created_by: user,
+            created_at: get("CREATED_AT") ?? get("created_at") ?? get("TS") ?? null,
+            raw: r,
+        };
+    });
 
-    // For compatibility with UI expect temp items having status/sumber fields
-    const normalizedTemp = (tempRaw || []).map((r) => ({
-      ...r,
-      sumber: "CA",
-      status: "tidak valid", // backend may supply other status; keep default
-    }));
-
-    // choose first log entry if exists
-    const logEntry = Array.isArray(logRaw) ? (logRaw.length ? logRaw[0] : null) : logRaw;
-    return { temp: normalizedTemp, log: logEntry };
-  } catch (e) {
-    console.error("runValidateAM error:", e);
-    throw e;
+    return { temp, inserted: payload.inserted };
+  } catch (error) {
+    // Ubah format error agar konsisten jika ada kegagalan Axios atau throw di atas
+    if (error.response) {
+      // Error dari API (misalnya status 500)
+      throw new Error(`Import failed: API returned ${error.response.status} - ${error.response.data?.message || 'Server error'}`);
+    } 
+    // Jika bukan error Axios, biarkan error asli (Import failed: ...) diteruskan
+    throw error;
   }
 }
 

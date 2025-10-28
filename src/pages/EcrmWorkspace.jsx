@@ -79,7 +79,7 @@ export default function EcrmWorkspace() {
     const tableCols = ["id_sales", "nik_am", "nama_am", "tr", "witel"];
     const popCols = POPOVER_FIELDS.map((f) => f.key);
     const fields = Array.from(
-      new Set([...tableCols, ...popCols, "am_aktif_posisi_oktober_2025"])
+      new Set([...tableCols, ...popCols, "am_aktif"])
     ); // include active flag
 
     getAMs(fields)
@@ -133,8 +133,6 @@ export default function EcrmWorkspace() {
 
       // ambil nilai flag aktif (coba beberapa variasi key)
       const rawActive =
-        getFieldValue(m, "AM_AKTIF_POSISI_OKTOBER_2025") ??
-        getFieldValue(m, "am_aktif_posisi_oktober_2025") ??
         getFieldValue(m, "AM_AKTIF") ??
         getFieldValue(m, "am_aktif") ??
         "";
@@ -214,8 +212,8 @@ export default function EcrmWorkspace() {
   // Hitung hanya AM yang aktif (berdasarkan kolom AM_AKTIF_POSISI_OKTOBER_2025)
   const activeFilteredCount = filtered.filter((r) => {
     const val =
-      getFieldValue(r, "AM_AKTIF_POSISI_OKTOBER_2025") ??
-      getFieldValue(r, "am_aktif_posisi_oktober_2025") ??
+      getFieldValue(r, "AM_AKTIF") ??
+      getFieldValue(r, "am_aktif") ??
       getFieldValue(r, "AM_AKTIF") ??
       getFieldValue(r, "am_aktif");
 

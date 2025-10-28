@@ -266,7 +266,7 @@ export default function ValidationPanel() {
     { key: "created_at", label: "Created At" },
   ];
 
-  // LOG columns
+   //LOG columns
   const logCols = [
     { key: "id_sales", label: "ID SALES" },
     { key: "nik_am", label: "NIK" },
