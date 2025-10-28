@@ -16,7 +16,7 @@ class AMController extends Controller
         'WITEL','witel',
         'TELDA','telda',
         'UPDATED_DATE','updated_date',
-        'AM_AKTIF','am_aktif','am_aktif',
+        'AM_AKTIF','am_aktif',
         // kolom popover yang kamu mint
         'NOTEL','notel',
         'EMAIL','email',

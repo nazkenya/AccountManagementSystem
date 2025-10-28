@@ -12,24 +12,27 @@ class TempProfilingController extends Controller
      * Return rows from TEMP_PROFELING.
      * We explicitly select only columns that ada pada tabel (sesuai schema yang kamu berikan)
      * sehingga tidak memanggil kolom yang tidak ada (mis. CREATED_BY).
+     * Menambahkan CREATED_AT dan CREATED_BY sebagai kolom yang diharapkan.
      */
     public function temp_t(Request $request): JsonResponse
     {
         try {
-            // Kolom yang ada di TEMP_PROFELING (sesuaikan bila ada tambahan)
+            // Kolom yang ada di TEMP_PROFELING (menambahkan CREATED_AT dan CREATED_BY)
             $cols = [
                 'ID_SALES',
                 'NIK_AM',
                 'NAMA_AM',
                 'REGION',
                 'WITEL',
-                'STATUS_APPROVED', 
+                'STATUS_APPROVED',
+                'CREATED_BY', 
+                'CREATED_AT',
             ];
 
             $rows = DB::table('TEMP_PROFELING')
                 ->select($cols)
-                // jika ada kolom timestamp yang tersedia dan ingin di-order, ubah di sini
-                // ->orderBy('CREATED_AT', 'desc')
+                // Order by CREATED_AT agar data terbaru muncul di atas
+                ->orderByDesc('CREATED_AT') 
                 ->get();
 
             return response()->json($rows);

@@ -4,132 +4,88 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class ImportFromNcrmController extends Controller
 {
-    /**
-     * POST /api/profiling/import-from-ncrm
-     * - Cari kandidat di NCRM_ACCOUNT (latest per ACCOUNT_TEAM_NIK)
-     * - Filter: segment RBS/DBS
-     * - Exclude yang sudah ada di MASTER_DATA_AM_RSMESV2 (by NIK)
-     * - Insert ke TEMP_PROFELING with STATUS_APPROVED = 'prosess approval'
-     * - Insert one log row into LOG_MASTER_PROFILE_RSMES
-     *
-     * Request body: { user?: string } (optional)
-     */
     public function store(Request $request)
     {
-        $user = $request->input('user', auth()->user()->name ?? 'system');
+        $user = $request->input('user', 'system');
+        Log::info("🚀 ImportFromNcrmController::store called", ['user' => $user]);
+
+        // FIX V3: Mengkonsolidasikan bind variable untuk CREATED_BY dan LOG_USER
+        // menjadi satu nama (:log_user) untuk menghindari potensi ambiguitas atau bug parser
+        // saat menggunakan INSERT ALL dengan dua bind variable bernama serupa.
+        $sql = "
+            INSERT ALL
+                INTO TEMP_PROFELING (ID_SALES, NIK_AM, NAMA_AM, REGION, WITEL, STATUS_APPROVED, CREATED_BY)
+                VALUES (ID_GEN, NIK_AM_CA, NAMA_AM_CA, REGION, WITEL, 'PENDING', :log_user)
+
+                INTO LOG_MASTER_PROFILE_RSMES (ID_SALES, NIK_AM, NAMA_AM, REGION, WITEL, LOG_USER, WORK_LOG)
+                VALUES (ID_GEN, NIK_AM_CA, NAMA_AM_CA, REGION, WITEL, :log_user, SYSTIMESTAMP)
+            SELECT
+                src.ID_GEN,
+                src.NIK_AM_CA,
+                src.NAMA_AM_CA,
+                src.REGION,
+                src.WITEL
+            FROM (
+                SELECT
+                    'TEMP_' || ROWNUM AS ID_GEN,
+                    t.NIK_AM_CA,
+                    t.NAMA_AM_CA,
+                    t.REGION,
+                    t.WITEL,
+                    t.rn
+                FROM (
+                    SELECT
+                        A.ACCOUNT_TEAM_NIK AS NIK_AM_CA,
+                        A.ACCOUNT_TEAM_NAME AS NAMA_AM_CA,
+                        A.REGION,
+                        A.WITEL,
+                        ROW_NUMBER() OVER (PARTITION BY A.ACCOUNT_TEAM_NIK ORDER BY A.ACCOUNT_CREATED DESC) AS rn
+                    FROM NCRM_ACCOUNT A
+                    WHERE
+                        A.ACCOUNT_TEAM_NIK IS NOT NULL
+                        AND (A.SEGMENT LIKE '%RBS%' OR A.SEGMENT = 'ERM RBS' OR A.SEGMENT LIKE '%DBS%')
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM MASTER_DATA_AM_RSMESV2 B
+                            WHERE B.NIK_AM = A.ACCOUNT_TEAM_NIK
+                        )
+                ) t
+                WHERE t.rn = 1
+            ) src
+                                       
+
+        ";
+        
+        // Memastikan bind variables sesuai dengan nama yang digunakan di SQL
+        // Hanya perlu satu binding untuk :log_user
+        $bindings = ['log_user' => $user];
 
         try {
-            return DB::transaction(function () use ($user) {
-                // 1) Prepare candidate query (latest per ACCOUNT_TEAM_NIK)
-                $sub = DB::table('NCRM_ACCOUNT')
-                    ->selectRaw('ACCOUNT_TEAM_NIK, MAX(ACCOUNT_CREATED) AS max_created')
-                    ->whereNotNull('ACCOUNT_TEAM_NIK')
-                    ->groupBy('ACCOUNT_TEAM_NIK');
+            Log::debug("🧠 About to execute INSERT ALL with bindings: ", $bindings);
+            DB::statement($sql, $bindings);
+            Log::info("✅ Insert ALL executed successfully");
 
-                $candidates = DB::table('NCRM_ACCOUNT as A')
-                    ->joinSub($sub, 't', function ($join) {
-                        $join->on('A.ACCOUNT_TEAM_NIK', '=', 't.ACCOUNT_TEAM_NIK')
-                             ->on('A.ACCOUNT_CREATED', '=', 't.max_created');
-                    })
-                    ->select(
-                        DB::raw('A.ACCOUNT_TEAM_NIK AS NIK_AM_CA'),
-                        DB::raw('A.ACCOUNT_TEAM_NAME AS NAMA_AM_CA'),
-                        'A.REGION',
-                        'A.WITEL'
-                    )
-                    ->whereNotNull('A.ACCOUNT_TEAM_NIK')
-                    ->where(function ($q) {
-                        $q->where('A.SEGMENT', 'like', '%RBS%')
-                          ->orWhere('A.SEGMENT', '=', 'ERM RBS')
-                          ->orWhere('A.SEGMENT', 'like', '%DBS%');
-                    })
-                    // exclude those already in MASTER_DATA_AM_RSMESV2 by NIK
-                    ->whereNotExists(function ($q) {
-                        $q->select(DB::raw(1))
-                          ->from('MASTER_DATA_AM_RSMESV2 as B')
-                          ->whereRaw('B.NIK_AM = A.ACCOUNT_TEAM_NIK');
-                    })
-                    ->get();
+            // fetch recently inserted rows. We use :user to match the CREATED_BY column.
+            $rows = DB::select("SELECT ID_SALES, NIK_AM, NAMA_AM, REGION, WITEL, STATUS_APPROVED FROM TEMP_PROFELING WHERE ID_SALES LIKE 'TEMP_%' AND CREATED_BY = :user ORDER BY ID_SALES DESC FETCH FIRST 50 ROWS ONLY", ['user' => $user]);
 
-                if ($candidates->isEmpty()) {
-                    // still create a log row (optional) — here we create a minimal log
-                    $log = [
-                        'ID_SALES' => null,
-                        'NIK_AM' => null,
-                        'NAMA_AM' => null,
-                        'REGION' => null,
-                        'WITEL' => null,
-                        'LOG_USER' => $user,
-                        'WORK_LOG' => DB::raw('SYSTIMESTAMP'),
-                    ];
-                    DB::table('LOG_MASTER_PROFILE_RSMES')->insert($log);
-
-                    return response()->json([
-                        'inserted' => [],
-                        'log' => DB::table('LOG_MASTER_PROFILE_RSMES')->orderByDesc('WORK_LOG')->first(),
-                        'message' => 'No new candidates.',
-                    ]);
-                }
-
-                // 2) Filter out ones already present in TEMP_PROFELING (avoid duplicates)
-                $toInsert = [];
-                foreach ($candidates as $c) {
-                    $nik = trim($c->NIK_AM_CA ?? '');
-                    if ($nik === '') continue;
-
-                    $existsInTemp = DB::table('TEMP_PROFELING')
-                        ->whereRaw('NVL(NIK_AM, \'\') = ?', [$nik]) // NVL for Oracle null-safe
-                        ->exists();
-
-                    if ($existsInTemp) continue;
-
-                    $idSales = 'TEMP_' . strtoupper(Str::random(8));
-
-                    $toInsert[] = [
-                        'ID_SALES' => $idSales,
-                        'NIK_AM' => $nik,
-                        'NAMA_AM' => $c->NAMA_AM_CA ?? null,
-                        'REGION' => $c->REGION ?? null,
-                        'WITEL' => $c->WITEL ?? null,
-                        'STATUS_APPROVED' => 'prosess approval',
-                    ];
-                }
-
-                // Bulk insert if any
-                if (!empty($toInsert)) {
-                    // DB::table()->insert() accepts array of rows
-                    DB::table('TEMP_PROFELING')->insert($toInsert);
-                }
-
-                // Create log entry (record who ran the import)
-                $logEntry = [
-                    'ID_SALES' => null,
-                    'NIK_AM' => null,
-                    'NAMA_AM' => null,
-                    'REGION' => null,
-                    'WITEL' => null,
-                    'LOG_USER' => $user,
-                    'WORK_LOG' => DB::raw('SYSTIMESTAMP'),
-                ];
-                DB::table('LOG_MASTER_PROFILE_RSMES')->insert($logEntry);
-
-                $lastLog = DB::table('LOG_MASTER_PROFILE_RSMES')->orderByDesc('WORK_LOG')->first();
-
-                return response()->json([
-                    'inserted' => $toInsert,
-                    'log' => $lastLog,
-                    'message' => count($toInsert) ? 'Inserted into TEMP_PROFELING' : 'No new rows inserted (already in TEMP).',
-                ]);
-            });
-        } catch (\Exception $e) {
-            // Helpful debug message: include DB error but be careful in production
             return response()->json([
-                'error' => 'Import failed',
-                'message' => $e->getMessage()
+                'success' => true,
+                'rows' => $rows,
+                'count' => count($rows),
+            ]);
+        } catch (\Exception $e) {
+            Log::error("❌ Insert ALL failed", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Oracle error',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

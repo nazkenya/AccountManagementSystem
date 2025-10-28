@@ -8,6 +8,7 @@ use App\Http\Controllers\ProfilingController;
 use App\Http\Controllers\TempProfilingController;
 use App\Http\Controllers\LogProfilingController;
 use App\Http\Controllers\CommitProfilingController;
+use App\Http\Controllers\ImportFromNcrmController;
 
 /*
 |--------------------------------------------------------------------------
