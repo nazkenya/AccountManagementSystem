@@ -4,94 +4,149 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CommitProfilingController extends Controller
 {
-    /**
-     * POST /api/profiling/commit
-     * Body: { "user": "role", "ids": ["TEMP_XXXX", "TEMP_YYYY"] }
-     *
-     * Fungsi:
-     * - Ambil data dari TEMP_PROFELING sesuai ID_SALES
-     * - Insert ke MASTER_DATA_AM_RSMESV2
-     * - Update STATUS_APPROVED menjadi "committed"
-     * - Tambah log ke LOG_MASTER_PROFILE_RSMES
-     */
-    public function store(Request $request)
+    // Helper: dapatkan field dari row (object atau array) dengan case-insensitive keys
+    protected function safeField($row, $candidates = [], $default = null)
+    {
+        if (!$row) return $default;
+
+        // Jika row adalah object (stdClass)
+        if (is_object($row)) {
+            $vars = get_object_vars($row); // associative array
+        } elseif (is_array($row)) {
+            $vars = $row;
+        } else {
+            return $default;
+        }
+
+        // normalisasi keys -> lowercase
+        $lowered = [];
+        foreach ($vars as $k => $v) {
+            $lowered[strtolower($k)] = $v;
+        }
+
+        // cek candidates (akan coba dalam urutan yang diberikan)
+        foreach ($candidates as $cand) {
+            $lk = strtolower($cand);
+            if (array_key_exists($lk, $lowered)) {
+                return $lowered[$lk];
+            }
+        }
+
+        return $default;
+    }
+
+    public function commit(Request $request)
     {
         $user = $request->input('user', 'system');
         $ids = $request->input('ids', []);
 
-        if (empty($ids)) {
-            return response()->json(['error' => 'No IDs provided'], 400);
+        if (empty($ids) || !is_array($ids)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ada ID valid untuk diproses.'
+            ], 400);
         }
 
         try {
-            return DB::transaction(function () use ($user, $ids) {
-                // 1️⃣ Ambil data dari TEMP_PROFELING
-                $rows = DB::table('TEMP_PROFELING')
-                    ->whereIn('ID_SALES', $ids)
-                    ->get();
+            DB::beginTransaction();
 
-                if ($rows->isEmpty()) {
-                    return response()->json(['error' => 'No matching TEMP rows found'], 404);
+            $committedIds = [];
+
+            foreach ($ids as $id) {
+                if (!$id || $id === 'null' || $id === 'undefined') {
+                    continue;
                 }
 
-                // 2️⃣ Insert ke MASTER_DATA_AM_RSMESV2
-                $insertRows = [];
-                foreach ($rows as $r) {
-                    $insertRows[] = [
-                        'ID_SALES'  => $r->ID_SALES,
-                        'NIK_AM'    => $r->NIK_AM,
-                        'NAMA_AM'   => $r->NAMA_AM,
-                        'TR'        => $r->REGION,
-                        'WITEL'     => $r->WITEL,
-                        'AM_AKTIF'  => 'AM AKTIF', // bisa sesuaikan default aktif
-                        'UPDATE_LOG'=> DB::raw('SYSTIMESTAMP'),
+                // Ambil data dari TEMP_PROFELING
+                $temp = DB::table('TEMP_PROFELING')->where('ID_SALES', $id)->first();
+
+                if (!$temp) {
+                    // log untuk debugging — data tidak ditemukan
+                    Log::warning("CommitProfiling: TEMP_PROFELING not found for ID_SALES={$id}");
+                    continue;
+                }
+
+                // Ambil fields dengan safeField (coba beberapa variasi nama kolom)
+                $nik   = $this->safeField($temp, ['NIK_AM', 'nik_am', 'nik']);
+                $nama  = $this->safeField($temp, ['NAMA_AM', 'nama_am', 'nama']);
+                $region  = $this->safeField($temp, ['REGION', 'region', 'tr']);
+                $witel = $this->safeField($temp, ['WITEL', 'witel']);
+                $created_by_temp = $this->safeField($temp, ['CREATED_BY', 'created_by', 'creator']);
+
+                // optional: jika semua kunci penting kosong, skip dan log
+                if (empty($nik) && empty($nama) && empty($region) && empty($witel)) {
+                    Log::warning("CommitProfiling: skipping ID {$id} because extracted fields are empty", [
+                        'id' => $id,
+                        'temp_row' => (is_object($temp) ? get_object_vars($temp) : $temp)
+                    ]);
+                    continue;
+                }
+
+                // Insert atau update ke MASTER_DATA_AM_RSMESV2
+                DB::table('MASTER_DATA_AM_RSMESV2')->updateOrInsert(
+                    ['ID_SALES' => $id],
+                    [
+                        'NIK_AM'    => $nik,
+                        'NAMA_AM'   => $nama,
+                        'TR'        => $region,
+                        'WITEL'     => $witel,
                         'CREATED_BY'=> $user,
-                    ];
-                }
+                        'UPDATE_LOG'=> now(),
+                    ]
+                );
 
-                DB::table('MASTER_DATA_AM_RSMESV2')->insert($insertRows);
-
-                // 3️⃣ Update STATUS_APPROVED di TEMP_PROFELING jadi “committed”
-                DB::table('TEMP_PROFELING')
-                    ->whereIn('ID_SALES', $ids)
+                // Update status di LOG_MASTER_PROFILE_RSMES
+                $updatedRows = DB::table('LOG_MASTER_PROFILE_RSMES')
+                    ->where('ID_SALES', $id)
                     ->update([
-                        'STATUS_APPROVED' => 'committed',
-                        'UPDATED_AT' => DB::raw('SYSTIMESTAMP'),
-                        'UPDATED_BY' => $user,
+                        'STATUS_APPROVED' => 'APPROVED',
+                        'WORK_LOG'        => now(),
+                        'LOG_USER'        => $user,
                     ]);
 
-                // 4️⃣ Catat log ke LOG_MASTER_PROFILE_RSMES
-                foreach ($rows as $r) {
+                if ($updatedRows === 0) {
                     DB::table('LOG_MASTER_PROFILE_RSMES')->insert([
-                        'ID_SALES' => $r->ID_SALES,
-                        'NIK_AM'   => $r->NIK_AM,
-                        'NAMA_AM'  => $r->NAMA_AM,
-                        'REGION'   => $r->REGION,
-                        'WITEL'    => $r->WITEL,
+                        'ID_SALES' => $id,
+                        'NIK_AM'   => $nik,
+                        'NAMA_AM'  => $nama,
+                        'REGION'   => $region,
+                        'WITEL'    => $witel,
                         'LOG_USER' => $user,
-                        'WORK_LOG' => DB::raw('SYSTIMESTAMP'),
+                        'WORK_LOG' => now(),
+                        'STATUS_APPROVED' => 'APPROVED',
                     ]);
                 }
 
-                // 5️⃣ Return hasil sukses
-                $lastLog = DB::table('LOG_MASTER_PROFILE_RSMES')
-                    ->orderByDesc('WORK_LOG')
-                    ->first();
+                // Hapus dari TEMP_PROFELING
+                DB::table('TEMP_PROFELING')->where('ID_SALES', $id)->delete();
 
-                return response()->json([
-                    'success' => true,
-                    'inserted' => count($insertRows),
-                    'ids' => $ids,
-                    'log' => $lastLog,
-                ]);
-            });
-        } catch (\Exception $e) {
+                $committedIds[] = $id;
+            }
+
+            DB::commit();
+
             return response()->json([
-                'error' => 'Commit failed',
-                'message' => $e->getMessage(),
+                'success' => true,
+                'message' => 'Commit berhasil dieksekusi.',
+                'committed_count' => count($committedIds),
+                'committed_ids' => $committedIds,
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            // Log error detail untuk debugging
+            Log::error('CommitProfiling failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Commit gagal: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -32,4 +32,4 @@ Route::get('/ca', [ProfilingController::class, 'caList']);
 Route::get('/profiling/temp', [TempProfilingController::class, 'temp_t']);
 Route::get('/profiling/log', [LogProfilingController::class, 'log_i']);
 Route::post('/profiling/import-from-ncrm', [ImportFromNcrmController::class, 'store']);
-Route::post('/profiling/commit', [CommitProfilingController::class, 'store']);
+Route::post('/profiling/commit', [CommitProfilingController::class, 'commit']);
