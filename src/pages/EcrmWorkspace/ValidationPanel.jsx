@@ -1,4 +1,3 @@
-// src/pages/ValidationPanel.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -134,6 +133,7 @@ export default function ValidationPanel() {
       setState("success");
     } catch (err) {
       console.error("handleValidateAM error", err);
+      alert(`❌ Compare gagal: ${err.message || "Terjadi kesalahan server"}`);
       setState("error");
     }
   }, [refreshTempAndLog]);
@@ -147,22 +147,65 @@ export default function ValidationPanel() {
           const k = getKey(t);
           return k && selectedTemp.has(k);
         });
+
         if (toInsert.length === 0) {
+          // <-- Guard: tidak ada baris terpilih => batalkan commit
+          alert("Tidak ada baris dipilih untuk commit");
           setState("idle");
           return;
         }
+
         const ids = toInsert.map((r) => r.id_sales ?? r.ID_SALES ?? r.nik_am ?? r.NIK_AM).filter(Boolean);
+
+        if (!ids || ids.length === 0) {
+          // safety double-check (seharusnya tidak masuk sini karena toInsert.length > 0)
+          alert("Tidak ada ID valid untuk dikirim ke server");
+          setState("idle");
+          return;
+        }
+
+        // panggil backend commit
         const commitRes = await generateCommit(user, ids);
-        // refresh ATM, TEMP, LOG
+
+        if (!commitRes || commitRes.success === false) {
+          throw new Error(commitRes?.message || "Commit API failed");
+        }
+
+        // update UI: hapus yang di-commit dari temp
+        const committedIds = commitRes.committed_ids ?? ids;
+        setTemp((prev) =>
+          prev.filter((r) => !committedIds.includes(r.id_sales ?? r.ID_SALES ?? r.nik_am ?? r.NIK_AM))
+        );
+
+        // update local log optimistically
+        const committedCount = commitRes.committed_count ?? committedIds.length;
+        setLog((prev) =>
+          prev.map((entry) => {
+            const entryId = entry.id_sales ?? entry.ID_SALES ?? entry.nik_am ?? entry.NIK_AM;
+            if (committedIds.includes(entryId)) {
+              return {
+                ...entry,
+                status_approved: "APPROVED",
+                work_log: new Date().toISOString(),
+              };
+            }
+            return entry;
+          })
+        );
+
+        // refresh master & temp/log from server to sync canonical state
         const atmData = await fetchATM();
         setAtm(Array.isArray(atmData) ? atmData : atm);
         await refreshTempAndLog();
+
         setSelectedTemp(new Set());
-        if (commitRes?.entry) setLog((prev) => [commitRes.entry, ...prev]);
         setActiveTab("ATM");
         setState("success");
+
+        alert(`✅ Commit berhasil: ${committedCount} row(s)`);
       } catch (err) {
         console.error("handleGenerate error", err);
+        alert(`❌ Gagal commit: ${err.message || "Terjadi kesalahan server"}`);
         setState("error");
       }
     },
@@ -208,7 +251,7 @@ export default function ValidationPanel() {
     const q = filter.toLowerCase();
     return log.filter(
       (t) =>
-        ((t.log_user || t.LOG_USER || "") + " " + (t.actor || "") + " " + (t.action || "")).toLowerCase().includes(q)
+        ((t.log_user || t.LOG_USER || "") + " " + (t.actor || "") + " " + (t.action || "") + " " + (t.status_approved || "")).toLowerCase().includes(q)
     );
   }, [log, filter]);
 
@@ -263,10 +306,11 @@ export default function ValidationPanel() {
     { key: "region", label: "Region" },
     { key: "witel", label: "Witel" },
     { key: "status_approved", label: "Status Approved" },
+    { key: "created_by", label: "Created By" },
     { key: "created_at", label: "Created At" },
   ];
 
-   //LOG columns
+  //LOG columns
   const logCols = [
     { key: "id_sales", label: "ID SALES" },
     { key: "nik_am", label: "NIK" },
@@ -275,6 +319,7 @@ export default function ValidationPanel() {
     { key: "witel", label: "WITEL" },
     { key: "log_user", label: "Log User" },
     { key: "work_log", label: "Work Log" },
+    { key: "status_approved", label: "Status Approved" },
   ];
 
   const renderTempCell = (row, key) => {
@@ -287,6 +332,13 @@ export default function ValidationPanel() {
       return <Badge variant={row.status_approved === "APPROVED" ? "success" : "neutral"}>{row.status_approved ?? "-"}</Badge>;
     }
     return row[key] ?? row?.raw?.[key] ?? "-";
+  };
+
+  const renderLogCell = (row, key) => {
+    if (key === "status_approved") {
+      return <Badge variant={row.status_approved === "APPROVED" ? "success" : "neutral"}>{row.status_approved ?? "-"}</Badge>;
+    }
+    return row[key] ?? "-";
   };
 
   const tabData = activeTab === "ATM" ? atmScoped : activeTab === "CA" ? caScoped : activeTab === "TEMP" ? tempScoped : logScoped;
@@ -344,7 +396,7 @@ export default function ValidationPanel() {
           { key: "ATM", label: "ATM" },
           { key: "CA", label: "CA" },
           { key: "TEMP", label: "TEMP" },
-          { key: "LOG", label: "LOG" },
+          //{ key: "LOG", label: "LOG" },
         ]}
         activeKey={activeTab}
         onChange={(k) => setActiveTab(k)}
@@ -354,7 +406,7 @@ export default function ValidationPanel() {
         columns={columns}
         data={tabData}
         rowKey={(row) => getKey(row) || row.nik_am || row.id_sales}
-        renderCell={activeTab === "TEMP" ? renderTempCell : undefined}
+        renderCell={activeTab === "TEMP" ? renderTempCell : activeTab === "LOG" ? renderLogCell : undefined}
         page={page}
         rowsPerPage={rowsPerPage}
         setPage={setPage}
