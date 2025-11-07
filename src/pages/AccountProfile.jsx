@@ -6,7 +6,7 @@ import PageHeader from '../components/ui/PageHeader'
 import Toolbar from '../components/ui/Toolbar'
 import { Badge } from '../components/ui/Badge'
 import Table from '../components/ui/Table'
-import { FaUsers, FaBalanceScale, FaProjectDiagram, FaChartBar, FaBoxOpen } from 'react-icons/fa'
+import { FaUsers, FaBalanceScale, FaProjectDiagram, FaChartBar, FaBoxOpen, FaUserPlus, FaTruck, FaExchangeAlt, FaSitemap, FaLightbulb, FaNetworkWired} from 'react-icons/fa'
 import { FiEdit, FiBookOpen, FiClock, FiUser, FiPrinter, FiRotateCcw, FiArrowLeft, FiSave, FiPlus, FiTrash2, FiFileText } from 'react-icons/fi'
 import DebouncedRichTextEditor from '../components/wiki/DebouncedRichTextEditor'
 import Select from '../components/ui/Select'
@@ -19,6 +19,12 @@ import { PicCard } from './accountProfile/components/PicCard'
 import { useDebouncedLocalStorage } from './accountProfile/hooks/useDebouncedLocalStorage'
 import { useCollapsedMap } from './accountProfile/hooks/useCollapsedMap'
 import { usePics } from './accountProfile/hooks/usePics'
+// Import the FiveForcesAnalysis component
+import FiveForcesAnalysis from '../components/analysis/FiveForcesAnalysis'
+// NEW: Import the SwotAnalysis component
+import SwotAnalysis from '../components/analysis/SwotAnalysis'
+import IndustryValueChainAnalysis from '../components/analysis/IndustryValueChainAnalysis'
+
 
 export default function AccountProfile() {
   const { id } = useParams()
@@ -40,8 +46,15 @@ export default function AccountProfile() {
     notesRows: [], // {id,churnReason,connectivityConfig}
     reportDate: '', serviceName: '', hardComplaint: '', urgency: '', slgAchievement: '', problemDescription: '',
     competitorName: '', competitorProduct: '', competitorContractEnd: '', competitorRevenueYTD: '', voiceOfCustomer: '', competitorPerformanceNote: '', competitorStrategy: '',
-    fiveForcesEntrants: '', fiveForcesSubstitute: '', fiveForcesBuyer: '', fiveForcesSupplier: '', fiveForcesRivalry: '',
-    strengths: '', weaknesses: '', opportunities: '', threats: '', valueChainFile: null, itRoadmapFile: null,
+    
+    // UPDATED: Changed Five Forces to be objects
+    fiveForcesEntrants: { rating: '', notes: '' },
+    fiveForcesSubstitute: { rating: '', notes: '' },
+    fiveForcesBuyer: { rating: '', notes: '' },
+    fiveForcesSupplier: { rating: '', notes: '' },
+    fiveForcesRivalry: { rating: '', notes: '' },
+
+    strengths: '', weaknesses: '', opportunities: '', threats: '', orgStructureFile: null, orgStructureNotes: '', valueChainFile: null, itRoadmapFile: null,
   }), [])
 
   const [formData, setFormDataRaw, lastEditedForm] = useDebouncedLocalStorage(formStorageKey, initialForm)
@@ -93,11 +106,73 @@ export default function AccountProfile() {
         updates.churnReason = ''
         updates.connectivityConfig = ''
       }
+      // Services (Telkom Service Performance) - migrate legacy single fields into a services table
+      if (Array.isArray(updates.services) && updates.services.length === 0 && (updates.reportDate || updates.serviceName || updates.hardComplaint || updates.urgency || updates.slgAchievement || updates.problemDescription)) {
+        updates.services = [{ id: `srv-${Date.now()}`, reportDate: updates.reportDate || '', serviceName: updates.serviceName || '', hardComplaint: updates.hardComplaint || '', urgency: updates.urgency || '', slgAchievement: updates.slgAchievement || '', problemDescription: updates.problemDescription || '' }]
+        // clear legacy single fields
+        updates.reportDate = ''
+        updates.serviceName = ''
+        updates.hardComplaint = ''
+        updates.urgency = ''
+        updates.slgAchievement = ''
+        updates.problemDescription = ''
+      }
       return updates
     })
   }, [setFormDataRaw])
 
-  const setField = React.useCallback((key, value) => setFormDataRaw(prev => ({ ...prev, [key]: value })), [setFormDataRaw])
+  // =================================================================
+  //  FIXED FUNCTION (prevents scroll-jump)
+  // =================================================================
+  const setField = React.useCallback((key, value) => {
+    // 1. Get current scroll position
+    const scrollY = (typeof window !== 'undefined' && window.scrollY) ? window.scrollY : 0
+    
+    // 2. Set the state
+    setFormDataRaw(prev => ({ ...prev, [key]: value }))
+    
+    // 3. Restore scroll position after the re-render
+    setTimeout(() => {
+      try {
+          window.scrollTo({ top: scrollY, behavior: 'instant' })
+        } catch {
+          // ignore errors
+        }
+    }, 0)
+  }, [setFormDataRaw])
+  // =================================================================
+
+  // One-time migration for Five Forces (from string to object)
+  React.useEffect(() => {
+    setFormDataRaw(prev => {
+      const needsMigration = typeof prev.fiveForcesEntrants === 'string' ||
+                            typeof prev.fiveForcesSubstitute === 'string' ||
+                            typeof prev.fiveForcesBuyer === 'string' ||
+                            typeof prev.fiveForcesSupplier === 'string' ||
+                            typeof prev.fiveForcesRivalry === 'string'
+      
+      if (!needsMigration) return prev
+
+      const updates = { ...prev }
+      
+      const migrateForce = (forceValue) => {
+        if (typeof forceValue === 'string') {
+          return { rating: forceValue, notes: '' }
+        }
+        return forceValue || { rating: '', notes: '' }
+      }
+
+      updates.fiveForcesEntrants = migrateForce(prev.fiveForcesEntrants)
+      updates.fiveForcesSubstitute = migrateForce(prev.fiveForcesSubstitute)
+      updates.fiveForcesBuyer = migrateForce(prev.fiveForcesBuyer)
+      updates.fiveForcesSupplier = migrateForce(prev.fiveForcesSupplier)
+      updates.fiveForcesRivalry = migrateForce(prev.fiveForcesRivalry)
+
+      return updates
+    })
+  }, [setFormDataRaw])
+
+
   const { addPic, updatePic, removePic, movePic } = usePics(setFormDataRaw)
   const [isReordering, setIsReordering] = React.useState(false)
   const [isTyping, setIsTyping] = React.useState(false)
@@ -132,13 +207,6 @@ export default function AccountProfile() {
   }, [setField])
 
   // Row mutation helpers for table sections
-  const updateRow = React.useCallback((key, id, field, value) => {
-    setFormDataRaw(prev => ({
-      ...prev,
-      [key]: (prev[key] || []).map(r => (r.id === id ? { ...r, [field]: value } : r)),
-    }))
-  }, [setFormDataRaw])
-
   const removeRow = React.useCallback((key, id) => {
     setFormDataRaw(prev => ({
       ...prev,
@@ -162,151 +230,7 @@ export default function AccountProfile() {
     if (!Array.isArray(rows)) return []
     return rows.filter(r => keys.some(k => (r?.[k] ?? '').toString().trim() !== ''))
   }, [])
-  const hasEmptyRow = React.useCallback((rows, keys) => {
-    if (!Array.isArray(rows)) return false
-    return rows.some(r => keys.every(k => (r?.[k] ?? '').toString().trim() === ''))
-  }, [])
-  function ContractTable({ rows = [], isEditing }) {
-    const columns = [
-      { key: 'title', label: 'Project/Product Title' },
-      { key: 'contractDate', label: 'Date of Contract' },
-      { key: 'endDate', label: 'End of Contract' },
-      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
-    ]
-    const displayRows = isEditing
-      ? rows
-      : getNonEmptyRows(rows, ['title', 'contractDate', 'endDate'])
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold text-neutral-900">Contract</div>
-          {isEditing && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={hasEmptyRow(rows, ['title','contractDate','endDate'])}
-              onClick={() => addRow('contracts', { title: '', contractDate: '', endDate: '' })}
-            >
-              <FiPlus className="w-4 h-4" /> Add
-            </Button>
-          )}
-        </div>
-        <Table
-          columns={columns}
-          data={displayRows}
-          rowKey={(r) => r.id}
-          renderCell={(row, key) => {
-            if (key === 'actions' && isEditing) {
-              return (
-                <Button variant="secondary" size="sm" onClick={() => removeRow('contracts', row.id)}><FiTrash2 /> Delete</Button>
-              )
-            }
-            if (isEditing) {
-              if (key === 'title') return <FormInput size="sm" value={row.title || ''} onChange={(v) => updateRow('contracts', row.id, 'title', v)} placeholder="Enter title" />
-              if (key === 'contractDate') return <FormInput size="sm" type="date" value={row.contractDate || ''} onChange={(v) => updateRow('contracts', row.id, 'contractDate', v)} />
-              if (key === 'endDate') return <FormInput size="sm" type="date" value={row.endDate || ''} onChange={(v) => updateRow('contracts', row.id, 'endDate', v)} />
-            }
-            return row[key] || '—'
-          }}
-          emptyMessage="No contracts"
-        />
-      </div>
-    )
-  }
-
-  function FinancialTable({ rows = [], isEditing }) {
-    const columns = [
-      { key: 'revenueYTD', label: 'Total Revenue YTD (IDR M)' },
-      { key: 'churnedProduct', label: 'Churned Product' },
-      { key: 'churnDate', label: 'Date of Churn' },
-      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
-    ]
-    const displayRows = isEditing
-      ? rows
-      : getNonEmptyRows(rows, ['revenueYTD', 'churnedProduct', 'churnDate'])
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold text-neutral-900">Financial & Churn</div>
-          {isEditing && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={hasEmptyRow(rows, ['revenueYTD','churnedProduct','churnDate'])}
-              onClick={() => addRow('financials', { revenueYTD: '', churnedProduct: '', churnDate: '' })}
-            >
-              <FiPlus className="w-4 h-4" /> Add
-            </Button>
-          )}
-        </div>
-        <Table
-          columns={columns}
-          data={displayRows}
-          rowKey={(r) => r.id}
-          renderCell={(row, key) => {
-            if (key === 'actions' && isEditing) {
-              return (
-                <Button variant="secondary" size="sm" onClick={() => removeRow('financials', row.id)}><FiTrash2 /> Delete</Button>
-              )
-            }
-            if (isEditing) {
-              if (key === 'revenueYTD') return <FormInput size="sm" type="number" value={row.revenueYTD || ''} onChange={(v) => updateRow('financials', row.id, 'revenueYTD', v)} placeholder="0" />
-              if (key === 'churnedProduct') return <FormInput size="sm" value={row.churnedProduct || ''} onChange={(v) => updateRow('financials', row.id, 'churnedProduct', v)} placeholder="Product" />
-              if (key === 'churnDate') return <FormInput size="sm" type="date" value={row.churnDate || ''} onChange={(v) => updateRow('financials', row.id, 'churnDate', v)} />
-            }
-            return row[key] || '—'
-          }}
-          emptyMessage="No financial records"
-        />
-      </div>
-    )
-  }
-
-  function NotesTable({ rows = [], isEditing }) {
-    const columns = [
-      { key: 'churnReason', label: 'Reason for Churn' },
-      { key: 'connectivityConfig', label: 'Connectivity Configuration' },
-      ...(isEditing ? [{ key: 'actions', label: 'Actions' }] : []),
-    ]
-    const displayRows = isEditing
-      ? rows
-      : getNonEmptyRows(rows, ['churnReason', 'connectivityConfig'])
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold text-neutral-900">Notes</div>
-          {isEditing && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={hasEmptyRow(rows, ['churnReason','connectivityConfig'])}
-              onClick={() => addRow('notesRows', { churnReason: '', connectivityConfig: '' })}
-            >
-              <FiPlus className="w-4 h-4" /> Add
-            </Button>
-          )}
-        </div>
-        <Table
-          columns={columns}
-          data={displayRows}
-          rowKey={(r) => r.id}
-          renderCell={(row, key) => {
-            if (key === 'actions' && isEditing) {
-              return (
-                <Button variant="secondary" size="sm" onClick={() => removeRow('notesRows', row.id)}><FiTrash2 /> Delete</Button>
-              )
-            }
-            if (isEditing) {
-              if (key === 'churnReason') return <FormInput type="textarea" size="sm" rows={2} value={row.churnReason || ''} onChange={(v) => updateRow('notesRows', row.id, 'churnReason', v)} />
-              if (key === 'connectivityConfig') return <FormInput type="textarea" size="sm" rows={2} value={row.connectivityConfig || ''} onChange={(v) => updateRow('notesRows', row.id, 'connectivityConfig', v)} />
-            }
-            return <div className="text-sm whitespace-pre-wrap">{row[key] || '—'}</div>
-          }}
-          emptyMessage="No notes"
-        />
-      </div>
-    )
-  }
+  
 
   // Custom sections (user-defined). We no longer seed defaults; start empty.
   const defaultSections = React.useMemo(() => [], [])
@@ -351,6 +275,34 @@ export default function AccountProfile() {
   const { collapsed, setCollapsed, expandAll, collapseAll } = useCollapsedMap(storageKey)
   const lastEdited = lastEditedSections || lastEditedForm
 
+  // Prevent accidental full-page reloads caused by form submissions originating
+  // from any nested form in this page.
+  const containerRef = React.useRef(null)
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el) return undefined
+    const onSubmit = (e) => {
+      e.preventDefault()
+    }
+    const onClickCapture = (ev) => {
+      try {
+        const btn = ev.target instanceof Element ? ev.target.closest('button') : null
+        if (btn && !btn.hasAttribute('type')) {
+          btn.setAttribute('type', 'button')
+        }
+      } catch {
+        // defensive: ignore any DOM errors
+      }
+    }
+
+    el.addEventListener('submit', onSubmit, true)
+    el.addEventListener('click', onClickCapture, true)
+    return () => {
+      el.removeEventListener('submit', onSubmit, true)
+      el.removeEventListener('click', onClickCapture, true)
+    }
+  }, [])
+
   const upsertSectionHtml = (secId, html) => {
     setSections((prev) => prev.map((s) => (s.id === secId ? { ...s, html } : s)))
   }
@@ -378,6 +330,12 @@ export default function AccountProfile() {
     switch (secId) {
       case 'template-company':
         return join([formData.companyName, formData.nipnas])
+      case 'template-org-structure': {
+        const parts = []
+        if (formData.orgStructureFile) parts.push('File')
+        if (!isBlankHtml(formData.orgStructureNotes)) parts.push('Notes')
+        return join(parts)
+      }
       case 'template-personnel': {
         const first = (formData.pics && formData.pics[0]) || null
         const initials = (first?.name || '').trim().split(/\s+/).filter(Boolean).slice(0,2).map(s => s[0]).join('').toLowerCase()
@@ -385,7 +343,6 @@ export default function AccountProfile() {
         return join([initials || null, count ? String(count) : null])
       }
       case 'template-products':
-        // Prefer first contract row summary; fallback to legacy fields
         if (Array.isArray(formData.contracts) && formData.contracts.length > 0) {
           const c = formData.contracts[0]
           return join([c.title, c.endDate])
@@ -396,18 +353,22 @@ export default function AccountProfile() {
       case 'template-competitor':
         return join([formData.competitorName, formData.competitorProduct])
       case 'template-strategic':
-        return join([formData.fiveForcesRivalry && `Rivalry: ${formData.fiveForcesRivalry}`, formData.fiveForcesBuyer && `Buyer: ${formData.fiveForcesBuyer}`])
+        return join([formData.fiveForcesRivalry?.rating && `Rivalry: ${formData.fiveForcesRivalry.rating}`, formData.fiveForcesBuyer?.rating && `Buyer: ${formData.fiveForcesBuyer.rating}`])
       default:
         return ''
     }
-  }, [formData])
+  }, [formData, isBlankHtml])
 
   // Template section wrapper
   const TemplateSection = ({ secId, title, icon: Icon, children }) => {
     const isCollapsed = !!collapsed[secId]
     const toggleCollapse = () => setCollapsed(prev => ({ ...prev, [secId]: !prev[secId] }))
     const isEditing = !!templateEditing[secId]
-    const toggleEdit = () => setTemplateEditing(prev => ({ ...prev, [secId]: !prev[secId] }))
+    const toggleEdit = () => {
+      const scrollY = (typeof window !== 'undefined' && window.scrollY) ? window.scrollY : 0
+      setTemplateEditing(prev => ({ ...prev, [secId]: !prev[secId] }))
+      setTimeout(() => { try { window.scrollTo({ top: scrollY, behavior: 'instant' }) } catch (e) { void e } }, 0)
+    }
     const summary = getTemplateSummary(secId)
     return (
       <Section
@@ -421,27 +382,220 @@ export default function AccountProfile() {
         headerRight={
           <div className="flex items-center gap-2">
             {!isEditing && (
-              <Button variant="secondary" size="sm" onClick={toggleEdit} className="text-[#2C5CC5]" aria-label="Edit section">
+              <Button type="button" variant="secondary" size="sm" onClick={toggleEdit} className="text-[#2C5CC5]" aria-label="Edit section">
                 <FiEdit className="w-4 h-4" />
                 <span className="hidden sm:inline">Edit</span>
               </Button>
             )}
             {isEditing && (
-              <Button variant="primary" size="sm" onClick={toggleEdit} aria-label="Save section"><FiSave className="w-4 h-4" /> Save</Button>
+              <Button type="button" variant="primary" size="sm" onClick={toggleEdit} aria-label="Save section"><FiSave className="w-4 h-4" /> Save</Button>
             )}
           </div>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           {typeof children === 'function' ? children(isEditing) : children}
         </div>
       </Section>
     )
   }
 
+  // Memoized table configs
+  const productsEditing = !!templateEditing['template-products']
+
+  const contractsColumns = React.useMemo(() => [
+    { key: 'title', label: 'Project/Product Title', editable: true },
+    { key: 'contractDate', label: 'Date of Contract', editable: true, type: 'date' },
+    { key: 'endDate', label: 'End of Contract', editable: true, type: 'date' },
+    ...(productsEditing ? [{ key: 'actions', label: 'Actions', editable: false, render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('contracts', row.id)}><FiTrash2 /> Delete</Button>
+    ) }] : []),
+  ], [productsEditing, removeRow])
+
+  const onContractsChange = React.useCallback((newData) => {
+    setFormDataRaw(prev => ({ ...prev, contracts: newData }))
+  }, [setFormDataRaw])
+
+  const onContractsAdd = React.useCallback(() => addRow('contracts', { title: '', contractDate: '', endDate: '' }), [addRow])
+
+  const financialColumns = React.useMemo(() => [
+    { key: 'revenueYTD', label: 'Total Revenue YTD (IDR M)', editable: true, type: 'number' },
+    { key: 'churnedProduct', label: 'Churned Product', editable: true },
+    { key: 'churnDate', label: 'Date of Churn', editable: true, type: 'date' },
+    ...(productsEditing ? [{ key: 'actions', label: 'Actions', editable: false, render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('financials', row.id)}><FiTrash2 /> Delete</Button>
+    ) }] : []),
+  ], [productsEditing, removeRow])
+
+  const onFinancialsChange = React.useCallback((newData) => {
+    setFormDataRaw(prev => ({ ...prev, financials: newData }))
+  }, [setFormDataRaw])
+
+  const onFinancialsAdd = React.useCallback(() => addRow('financials', { revenueYTD: '', churnedProduct: '', churnDate: '' }), [addRow])
+
+  const notesColumns = React.useMemo(() => [
+    { key: 'churnReason', label: 'Reason for Churn', editable: true, type: 'textarea' },
+    { key: 'connectivityConfig', label: 'Connectivity Configuration', editable: true, type: 'textarea' },
+    ...(productsEditing ? [{ key: 'actions', label: 'Actions', editable: false, render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('notesRows', row.id)}><FiTrash2 /> Delete</Button>
+    ) }] : []),
+  ], [productsEditing, removeRow])
+
+  const onNotesChange = React.useCallback((newData) => {
+    setFormDataRaw(prev => ({ ...prev, notesRows: newData }))
+  }, [setFormDataRaw])
+
+  const onNotesAdd = React.useCallback(() => addRow('notesRows', { churnReason: '', connectivityConfig: '' }), [addRow])
+
+  const servicesEditing = !!templateEditing['template-service']
+
+  const servicesColumns = React.useMemo(() => [
+    { key: 'reportDate', label: 'Report Date', editable: true, type: 'date' },
+    { key: 'serviceName', label: 'Service Name (Affected)', editable: true },
+    { key: 'hardComplaint', label: 'Hard Complaint', editable: true },
+    { key: 'urgency', label: 'Urgency', editable: true },
+    { key: 'slgAchievement', label: 'SLG Achievement (%)', editable: true, type: 'number' },
+    { key: 'problemDescription', label: 'Problem Description', editable: true, type: 'textarea' },
+    ...(servicesEditing ? [{ key: 'actions', label: 'Actions', editable: false, render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('services', row.id)}><FiTrash2 /> Delete</Button>
+    ) }] : []),
+  ], [servicesEditing, removeRow])
+
+  const onServicesChange = React.useCallback((newData) => {
+    setFormDataRaw(prev => ({ ...prev, services: newData }))
+  }, [setFormDataRaw])
+
+  const onServicesAdd = React.useCallback(() => addRow('services', { reportDate: '', serviceName: '', hardComplaint: '', urgency: '', slgAchievement: '', problemDescription: '' }), [addRow])
+  
+  // One-time migration for competitors
+  React.useEffect(() => {
+    setFormDataRaw(prev => {
+      const updates = { ...prev }
+      if (Array.isArray(updates.competitors) && updates.competitors.length === 0 && (
+        updates.competitorName || updates.competitorProduct || updates.competitorContractEnd || updates.competitorRevenueYTD || updates.voiceOfCustomer || updates.competitorPerformanceNote || updates.competitorStrategy
+      )) {
+        updates.competitors = [{
+          id: `cmp-${Date.now()}`,
+          competitorName: updates.competitorName || '',
+          competitorProduct: updates.competitorProduct || '',
+          competitorContractEnd: updates.competitorContractEnd || '',
+          competitorRevenueYTD: updates.competitorRevenueYTD || '',
+          voiceOfCustomer: updates.voiceOfCustomer || '',
+          competitorPerformanceNote: updates.competitorPerformanceNote || '',
+          competitorStrategy: updates.competitorStrategy || '',
+        }]
+        // clear legacy single fields
+        updates.competitorName = ''
+        updates.competitorProduct = ''
+        updates.competitorContractEnd = ''
+        updates.competitorRevenueYTD = ''
+        updates.voiceOfCustomer = ''
+        updates.competitorPerformanceNote = ''
+        updates.competitorStrategy = ''
+      }
+      return updates
+    })
+  }, [setFormDataRaw])
+
+  // 1️⃣ Produk / Solusi Kompetitor
+const competitorsProductsEditing = !!templateEditing['template-competitor-products']
+
+const competitorsProductsColumns = React.useMemo(() => [
+  { key: 'competitorName', label: 'Competitor', editable: true },
+  { key: 'productService', label: "Competitor's Product/Services", editable: true },
+  { key: 'endOfContract', label: 'End of Contract', editable: true, type: 'date' },
+  { key: 'totalRevYtd', label: 'Total Rev YTD 2023 (IDR M)', editable: true, type: 'number' },
+  ...(competitorsProductsEditing ? [{
+    key: 'actions',
+    label: 'Actions',
+    editable: false,
+    render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('competitorsProducts', row.id)}>
+        <FiTrash2 /> Delete
+      </Button>
+    ),
+  }] : []),
+], [competitorsProductsEditing, removeRow])
+
+const onCompetitorsProductsChange = React.useCallback((newData) => {
+  setFormDataRaw(prev => ({ ...prev, competitorsProducts: newData }))
+}, [setFormDataRaw])
+
+const onCompetitorsProductsAdd = React.useCallback(() => 
+  addRow('competitorsProducts', {
+    competitorName: '',
+    productService: '',
+    endOfContract: '',
+    totalRevYtd: '',
+  }), [addRow])
+
+// 2️⃣ Performansi Layanan & VoC
+const competitorsPerformanceEditing = !!templateEditing['template-competitor-performance']
+
+const competitorsPerformanceColumns = React.useMemo(() => [
+  { key: 'competitorName', label: 'Nama Kompetitor', editable: true },
+  { key: 'productName', label: 'Nama Product', editable: true },
+  { key: 'voc', label: 'VoC', editable: true, type: 'select', options: [
+    { value: '', label: 'Select…' },
+    { value: 'Positive', label: 'Positive' },
+    { value: 'Neutral', label: 'Neutral' },
+    { value: 'Negative', label: 'Negative' },
+  ]},
+  { key: 'performanceDesc', label: 'Deskripsi Performansi Layanan Kompetitor', editable: true, type: 'textarea' },
+  ...(competitorsPerformanceEditing ? [{
+    key: 'actions',
+    label: 'Actions',
+    editable: false,
+    render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('competitorsPerformance', row.id)}>
+        <FiTrash2 /> Delete
+      </Button>
+    ),
+  }] : []),
+], [competitorsPerformanceEditing, removeRow])
+
+const onCompetitorsPerformanceChange = React.useCallback((newData) => {
+  setFormDataRaw(prev => ({ ...prev, competitorsPerformance: newData }))
+}, [setFormDataRaw])
+
+const onCompetitorsPerformanceAdd = React.useCallback(() => 
+  addRow('competitorsPerformance', {
+    competitorName: '',
+    productName: '',
+    voc: '',
+    performanceDesc: '',
+  }), [addRow])
+
+// 3️⃣ Analisa Strategi Kompetitor
+const competitorsStrategyEditing = !!templateEditing['template-competitor-strategy']
+
+const competitorsStrategyColumns = React.useMemo(() => [
+  { key: 'competitorName', label: 'Competitor', editable: true },
+  { key: 'businessStrategy', label: 'Business Strategy', editable: true, type: 'textarea' },
+  ...(competitorsStrategyEditing ? [{
+    key: 'actions',
+    label: 'Actions',
+    editable: false,
+    render: (row) => (
+      <Button type="button" variant="secondary" size="sm" onClick={() => removeRow('competitorsStrategy', row.id)}>
+        <FiTrash2 /> Delete
+      </Button>
+    ),
+  }] : []),
+], [competitorsStrategyEditing, removeRow])
+
+const onCompetitorsStrategyChange = React.useCallback((newData) => {
+  setFormDataRaw(prev => ({ ...prev, competitorsStrategy: newData }))
+}, [setFormDataRaw])
+
+const onCompetitorsStrategyAdd = React.useCallback(() => 
+  addRow('competitorsStrategy', {
+    competitorName: '',
+    businessStrategy: '',
+  }), [addRow])
 
   return (
-    <div className="animate-fade-in">
+    <div ref={containerRef} className="animate-fade-in">
       {/* Page header */}
       <PageHeader
         title="Profile Wiki"
@@ -449,9 +603,9 @@ export default function AccountProfile() {
         variant="hero"
         right={(
           <Toolbar>
-            <Button variant="secondary"><FiPrinter className="w-4 h-4" /> Export PDF</Button>
-            <Button variant="secondary"><FiRotateCcw className="w-4 h-4" /> Riwayat</Button>
-            <Button variant="secondary" onClick={() => navigate(`/customers/${id}`)}><FiArrowLeft className="w-4 h-4" /> Back</Button>
+            <Button type="button" variant="secondary"><FiPrinter className="w-4 h-4" /> Export PDF</Button>
+            <Button type="button" variant="secondary"><FiRotateCcw className="w-4 h-4" /> Riwayat</Button>
+            <Button type="button" variant="secondary" onClick={() => navigate(`/customers/${id}`)}><FiArrowLeft className="w-4 h-4" /> Back</Button>
           </Toolbar>
         )}
         className="mb-4 bg-white rounded-xl p-4 border border-neutral-200"
@@ -463,11 +617,10 @@ export default function AccountProfile() {
         <div>
           <Card className="p-2 sm:p-3 overflow-hidden">
             {/* Template Modules */}
-            <div className="divide-y divide-neutral-100">
+            <div className="divide-y divide-neutral-100 space-y-8">
               <TemplateSection secId="template-company" title="Company Demographics" icon={FaUsers}>
                 {(isEditing) => (
                   <>
-                    {/* Identity row: Larger logo at left, Name + NIPNAS side-by-side at right */}
                     <div className="grid grid-cols-[96px_1fr] gap-4 items-start">
                       <div>
                         <ViewOrEdit
@@ -577,10 +730,44 @@ export default function AccountProfile() {
                 )}
               </TemplateSection>
 
+              <TemplateSection secId="template-org-structure" title="Organization Structure" icon={FaSitemap}>
+                {(isEditing) => (
+                  <div className="space-y-2">
+                    <div className="space-y-2">
+                      <Field idFor="orgStructureFile" label="Organization Chart / File" className="sm:col-span-2">
+                        <ViewOrEdit editing={isEditing} view={formData.orgStructureFile ? (
+                          <a className="text-sm text-[#2C5CC5] hover:underline" href={formData.orgStructureFile.dataUrl} download={formData.orgStructureFile.name}>Download</a>
+                        ) : (
+                          <div className="text-sm text-neutral-500">—</div>
+                        )}>
+                          <FileInput
+                            id="orgStructureFile"
+                            value={formData.orgStructureFile}
+                            onChange={(f) => handleFileChange('orgStructureFile', f, { maxSizeMB: 5 })}
+                            onClear={() => setField('orgStructureFile', null)}
+                            accept="image/*,.pdf"
+                            editLabel="Replace file"
+                            removeLabel="Remove file"
+                            uploadLabel="Upload file"
+                          />
+                        </ViewOrEdit>
+                      </Field>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Field idFor="orgStructureNotes" label="Notes (Organization Structure)" className="sm:col-span-2">
+                        <ViewOrEdit editing={isEditing} view={renderRichOrPlain(formData.orgStructureNotes)}>
+                          <DebouncedRichTextEditor value={formData.orgStructureNotes} onChange={(html) => setField('orgStructureNotes', html)} />
+                        </ViewOrEdit>
+                      </Field>
+                    </div>
+                  </div>
+                )}
+              </TemplateSection>
+
               <TemplateSection secId="template-personnel" title="Key Personnel" icon={FiUser}>
                 {(isEditing) => (
                   <div className="space-y-3">
-                    {/* Cards grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {formData.pics && formData.pics.length > 0 ? formData.pics.map((p, idx) => (
                         <PicCard
@@ -603,124 +790,179 @@ export default function AccountProfile() {
                     </div>
 
                     {isEditing && (
-                      <Button variant="secondary" size="sm" onClick={addPic} className="text-[#2C5CC5]"> <FiPlus className="w-4 h-4" /> Add PIC</Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={addPic} className="text-[#2C5CC5]"> <FiPlus className="w-4 h-4" /> Add PIC</Button>
                     )}
                   </div>
                 )}
               </TemplateSection>
               <TemplateSection secId="template-products" title="Telkom Products & Services" icon={FaBoxOpen}>
                 {(isEditing) => (
-                  <div className="space-y-4">
-                    <ContractTable rows={formData.contracts || []} isEditing={isEditing} />
-                    <FinancialTable rows={formData.financials || []} isEditing={isEditing} />
-                    <NotesTable rows={formData.notesRows || []} isEditing={isEditing} />
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-neutral-900">Contract</div>
+                      </div>
+                      <Table
+                        columns={contractsColumns}
+                        data={isEditing ? (formData.contracts || []) : getNonEmptyRows(formData.contracts || [], ['title','contractDate','endDate'])}
+                        rowKey="id"
+                        mode={isEditing ? 'addable' : 'readonly'}
+                        onDataChange={onContractsChange}
+                        onAddRow={onContractsAdd}
+                        emptyMessage="No contracts"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-neutral-900">Financial & Churn</div>
+                      </div>
+                      <Table
+                        columns={financialColumns}
+                        data={isEditing ? (formData.financials || []) : getNonEmptyRows(formData.financials || [], ['revenueYTD','churnedProduct','churnDate'])}
+                        rowKey="id"
+                        mode={isEditing ? 'addable' : 'readonly'}
+                        onDataChange={onFinancialsChange}
+                        onAddRow={onFinancialsAdd}
+                        emptyMessage="No financial records"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-neutral-900">Notes</div>
+                      </div>
+                      <Table
+                        columns={notesColumns}
+                        data={isEditing ? (formData.notesRows || []) : getNonEmptyRows(formData.notesRows || [], ['churnReason','connectivityConfig'])}
+                        rowKey="id"
+                        mode={isEditing ? 'addable' : 'readonly'}
+                        onDataChange={onNotesChange}
+                        onAddRow={onNotesAdd}
+                        emptyMessage="No notes"
+                      />
+                    </div>
                   </div>
                 )}
               </TemplateSection>
 
               <TemplateSection secId="template-service" title="Telkom Service Performance" icon={FaChartBar}>
                 {(isEditing) => (
-                  <>
-                    <Group title="Incident">
-                      <Field idFor="reportDate" label="Report Date"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.reportDate || '—'}</div>}><DebouncedTextInput id="reportDate" type="date" value={formData.reportDate} onChange={v => setField('reportDate', v)} /></ViewOrEdit></Field>
-                      <Field idFor="serviceName" label="Service Name (Affected)"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.serviceName || '—'}</div>}><DebouncedTextInput id="serviceName" value={formData.serviceName} onChange={v => setField('serviceName', v)} /></ViewOrEdit></Field>
-                      <Field idFor="hardComplaint" label="Hard Complaint"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.hardComplaint || '—'}</div>}>
-                        <Select value={formData.hardComplaint} onChange={e => setField('hardComplaint', e.target.value)} id="hardComplaint">
-                          <option value="">Select…</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="urgency" label="Urgency"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.urgency || '—'}</div>}>
-                        <Select value={formData.urgency} onChange={e => setField('urgency', e.target.value)} id="urgency">
-                          <option value="">Select…</option>
-                          <option value="Super Emergency">Super Emergency</option>
-                          <option value="Hard">Hard</option>
-                          <option value="Normal">Normal</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="slgAchievement" label="SLG Achievement (%)"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.slgAchievement || '—'}</div>}><DebouncedTextInput id="slgAchievement" type="number" value={formData.slgAchievement} onChange={v => setField('slgAchievement', v)} /></ViewOrEdit></Field>
-                      <Field idFor="problemDescription" label="Problem Description" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.problemDescription || '—'}</div>}><DebouncedTextArea id="problemDescription" value={formData.problemDescription} onChange={v => setField('problemDescription', v)} rows={3} /></ViewOrEdit></Field>
-                    </Group>
-                  </>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-neutral-900">Service Performance</div>
+                    </div>
+                    <Table
+                      columns={servicesColumns}
+                      data={isEditing ? (formData.services || []) : getNonEmptyRows(formData.services || [], ['serviceName','reportDate'])}
+                      rowKey="id"
+                      mode={isEditing ? 'addable' : 'readonly'}
+                      onDataChange={onServicesChange}
+                      onAddRow={onServicesAdd}
+                      emptyMessage="No service records"
+                    />
+                  </div>
                 )}
               </TemplateSection>
 
               <TemplateSection secId="template-competitor" title="Competitor Landscape" icon={FaBalanceScale}>
                 {(isEditing) => (
-                  <>
-                    <Group title="Overview">
-                      <Field idFor="competitorName" label="Competitor Name"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.competitorName || '—'}</div>}><DebouncedTextInput id="competitorName" value={formData.competitorName} onChange={v => setField('competitorName', v)} /></ViewOrEdit></Field>
-                      <Field idFor="competitorProduct" label="Product/Service"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.competitorProduct || '—'}</div>}><DebouncedTextInput id="competitorProduct" value={formData.competitorProduct} onChange={v => setField('competitorProduct', v)} /></ViewOrEdit></Field>
-                      <Field idFor="competitorContractEnd" label="Contract End Date"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.competitorContractEnd || '—'}</div>}><DebouncedTextInput id="competitorContractEnd" type="date" value={formData.competitorContractEnd} onChange={v => setField('competitorContractEnd', v)} /></ViewOrEdit></Field>
-                      <Field idFor="competitorRevenueYTD" label="Revenue YTD (IDR M)"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.competitorRevenueYTD || '—'}</div>}><DebouncedTextInput id="competitorRevenueYTD" type="number" value={formData.competitorRevenueYTD} onChange={v => setField('competitorRevenueYTD', v)} /></ViewOrEdit></Field>
-                      <Field idFor="voiceOfCustomer" label="VoC"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.voiceOfCustomer || '—'}</div>}>
-                        <Select value={formData.voiceOfCustomer} onChange={e => setField('voiceOfCustomer', e.target.value)} id="voiceOfCustomer">
-                          <option value="">Select…</option>
-                          <option value="Positive">Positive</option>
-                          <option value="Negative">Negative</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                    </Group>
-                    <Group title="Notes">
-                      <Field idFor="competitorPerformanceNote" label="Performance Note" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.competitorPerformanceNote || '—'}</div>}><DebouncedTextArea id="competitorPerformanceNote" value={formData.competitorPerformanceNote} onChange={v => setField('competitorPerformanceNote', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="competitorStrategy" label="Business Strategy" className="sm:col-span-2"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.competitorStrategy || '—'}</div>}><DebouncedTextArea id="competitorStrategy" value={formData.competitorStrategy} onChange={v => setField('competitorStrategy', v)} rows={3} /></ViewOrEdit></Field>
-                    </Group>
-                  </>
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-neutral-900">Competitors Products</div>
+                    </div>
+                    <Table
+                      columns={competitorsProductsColumns}
+                      data={formData.competitorsProducts || []}
+                      rowKey="id"
+                      mode={isEditing ? 'addable' : 'readonly'}
+                      onDataChange={onCompetitorsProductsChange}
+                      onAddRow={onCompetitorsProductsAdd}
+                      emptyMessage="No competitor product records"
+                    />
+
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-neutral-900">Competitors Performance</div>
+                    </div>
+                    <Table
+                      columns={competitorsPerformanceColumns}
+                      data={formData.competitorsPerformance || []}
+                      rowKey="id"
+                      mode={isEditing ? 'addable' : 'readonly'}
+                      onDataChange={onCompetitorsPerformanceChange}
+                      onAddRow={onCompetitorsPerformanceAdd}
+                      emptyMessage="No competitor performance records"
+                    />
+
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-neutral-900">Competitors Strategy</div>
+                    </div>
+                    <Table
+                      columns={competitorsStrategyColumns}
+                      data={formData.competitorsStrategy || []}
+                      rowKey="id"
+                      mode={isEditing ? 'addable' : 'readonly'}
+                      onDataChange={onCompetitorsStrategyChange}
+                      onAddRow={onCompetitorsStrategyAdd}
+                      emptyMessage="No competitor strategy records"
+                    />
+                  </div>
                 )}
               </TemplateSection>
 
-              <TemplateSection secId="template-strategic" title="Strategic Analysis" icon={FaProjectDiagram}>
+
+              <TemplateSection secId="template-fiveforces" title="Five Forces Analysis" icon={FaProjectDiagram}>
+                {(isEditing) => (
+                  <div className="space-y-2">
+                    <div className="sm:col-span-2">
+                      <FiveForcesAnalysis
+                        formData={formData}
+                        setField={setField}
+                        isEditing={isEditing}
+                      />
+                    </div>
+                  </div>
+                )}
+              </TemplateSection>
+
+              <TemplateSection secId="template-swot" title="SWOT Analysis" icon={FaProjectDiagram}>
+                {(isEditing) => (
+                  <div className="space-y-2">
+                    <div className="sm:col-span-2">
+                      <SwotAnalysis
+                        formData={formData}
+                        setField={setField}
+                        isEditing={isEditing}
+                      />
+                    </div>
+                  </div>
+                )}
+              </TemplateSection>
+              <TemplateSection secId="template-artifacts" title="Industry Value Chain Analysis" icon={FaNetworkWired}>
+                {(isEditing) => (
+                  <div className="space-y-2">
+                    <div className="sm:col-span-2">
+                      <IndustryValueChainAnalysis
+                        formData={formData}
+                        setField={setField}
+                        isEditing={isEditing}
+                      />
+                    </div>
+                  </div>
+                )}
+              </TemplateSection>
+
+              {/* <TemplateSection secId="template-artifacts" title="Artifacts" icon={FaProjectDiagram}>
+                {(isEditing) => (
+                        setField={setField}
+                        isEditing={isEditing}
+                      />
+                    </div>
+                  </div>
+                )}
+              </TemplateSection>
+
+              {/* <TemplateSection secId="template-artifacts" title="Artifacts" icon={FaProjectDiagram}>
                 {(isEditing) => (
                   <>
-                    <Group title="Five Forces">
-                      <Field idFor="fiveForcesEntrants" label="New Entrants"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.fiveForcesEntrants || '—'}</div>}>
-                        <Select value={formData.fiveForcesEntrants} onChange={e => setField('fiveForcesEntrants', e.target.value)} id="fiveForcesEntrants">
-                          <option value="">Select…</option>
-                          <option value="Low">Low</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="High">High</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="fiveForcesSubstitute" label="Substitute"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.fiveForcesSubstitute || '—'}</div>}>
-                        <Select value={formData.fiveForcesSubstitute} onChange={e => setField('fiveForcesSubstitute', e.target.value)} id="fiveForcesSubstitute">
-                          <option value="">Select…</option>
-                          <option value="Low">Low</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="High">High</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="fiveForcesBuyer" label="Buyer Power"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.fiveForcesBuyer || '—'}</div>}>
-                        <Select value={formData.fiveForcesBuyer} onChange={e => setField('fiveForcesBuyer', e.target.value)} id="fiveForcesBuyer">
-                          <option value="">Select…</option>
-                          <option value="Low">Low</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="High">High</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="fiveForcesSupplier" label="Supplier Power"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.fiveForcesSupplier || '—'}</div>}>
-                        <Select value={formData.fiveForcesSupplier} onChange={e => setField('fiveForcesSupplier', e.target.value)} id="fiveForcesSupplier">
-                          <option value="">Select…</option>
-                          <option value="Low">Low</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="High">High</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                      <Field idFor="fiveForcesRivalry" label="Rivalry"><ViewOrEdit editing={isEditing} view={<div className="text-sm">{formData.fiveForcesRivalry || '—'}</div>}>
-                        <Select value={formData.fiveForcesRivalry} onChange={e => setField('fiveForcesRivalry', e.target.value)} id="fiveForcesRivalry">
-                          <option value="">Select…</option>
-                          <option value="Low">Low</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="High">High</option>
-                        </Select>
-                      </ViewOrEdit></Field>
-                    </Group>
-                    <Group title="SWOT">
-                      <Field idFor="strengths" label="Strengths"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.strengths || '—'}</div>}><DebouncedTextArea id="strengths" value={formData.strengths} onChange={v => setField('strengths', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="weaknesses" label="Weaknesses"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.weaknesses || '—'}</div>}><DebouncedTextArea id="weaknesses" value={formData.weaknesses} onChange={v => setField('weaknesses', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="opportunities" label="Opportunities"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.opportunities || '—'}</div>}><DebouncedTextArea id="opportunities" value={formData.opportunities} onChange={v => setField('opportunities', v)} rows={3} /></ViewOrEdit></Field>
-                      <Field idFor="threats" label="Threats"><ViewOrEdit editing={isEditing} view={<div className="text-sm whitespace-pre-wrap">{formData.threats || '—'}</div>}><DebouncedTextArea id="threats" value={formData.threats} onChange={v => setField('threats', v)} rows={3} /></ViewOrEdit></Field>
-                    </Group>
                     <Group title="Artifacts">
                       <Field idFor="valueChainFile" label="Value Chain Analysis"><ViewOrEdit editing={isEditing} view={formData.valueChainFile ? <a className="text-sm text-[#2C5CC5] hover:underline" href={formData.valueChainFile.dataUrl} download={formData.valueChainFile.name}>Download</a> : <div className="text-sm text-neutral-500">—</div>}>
                         <FileInput
@@ -749,14 +991,18 @@ export default function AccountProfile() {
                     </Group>
                   </>
                 )}
-              </TemplateSection>
+              </TemplateSection> */}
             </div>
-            <div className="mt-6">
+            <div className="mt-10">
               <div className="text-sm font-semibold text-neutral-800 mb-2">Custom Sections</div>
-              <div className="divide-y divide-neutral-100">
+              <div className="divide-y divide-neutral-100 space-y-8">
           {(Array.isArray(sections) ? sections : []).map((s) => {
             const isEditing = !!editing[s.id]
-            const toggleEdit = () => setEditing((prev) => ({ ...prev, [s.id]: !prev[s.id] }))
+            const toggleEdit = () => {
+              const scrollY = (typeof window !== 'undefined' && window.scrollY) ? window.scrollY : 0
+              setEditing((prev) => ({ ...prev, [s.id]: !prev[s.id] }))
+              setTimeout(() => { try { window.scrollTo({ top: scrollY, behavior: 'instant' }) } catch (e) { void e } }, 0)
+            }
             const empty = isBlankHtml(s.html)
             const isCollapsed = !!collapsed[s.id]
             const toggleCollapse = () => setCollapsed((prev) => ({ ...prev, [s.id]: !prev[s.id] }))
@@ -773,6 +1019,7 @@ export default function AccountProfile() {
                   <div className="flex items-center gap-2">
                     {!isEditing && (
                       <Button
+                        type="button"
                         variant="secondary"
                         size="sm"
                         onClick={toggleEdit}
@@ -786,6 +1033,7 @@ export default function AccountProfile() {
                     )}
                     {isEditing && !defaultIds.has(s.id) && (
                       <Button
+                        type="button"
                         variant="danger"
                         size="sm"
                         onClick={() => removeSection(s.id)}
@@ -796,9 +1044,14 @@ export default function AccountProfile() {
                     )}
                     {isEditing && (
                       <Button
+                        type="button"
                         variant="primary"
                         size="sm"
-                        onClick={() => setEditing((prev) => ({ ...prev, [s.id]: false }))}
+                        onClick={() => {
+                          const scrollY = (typeof window !== 'undefined' && window.scrollY) ? window.scrollY : 0
+                          setEditing((prev) => ({ ...prev, [s.id]: false }))
+                          setTimeout(() => { try { window.scrollTo({ top: scrollY, behavior: 'instant' }) } catch (e) { void e } }, 0)
+                        }}
                         aria-label="Save section"
                       >
                         <FiSave className="w-4 h-4" /> Save
@@ -833,7 +1086,6 @@ export default function AccountProfile() {
 
         {/* Right sidebar */}
   <aside className="lg:sticky lg:top-[84px] h-max space-y-4 hidden lg:block">
-          {/* Kelengkapan Profil */}
           <Card className="p-4">
             <div className="text-sm font-semibold text-neutral-800 mb-3">Kelengkapan Profil</div>
             <div className="flex items-center justify-center py-2">
@@ -842,7 +1094,6 @@ export default function AccountProfile() {
               )})()}
             </div>
           </Card>
-          {/* Info Halaman */}
           <Card className="p-4">
             <div className="text-sm font-semibold text-neutral-800 mb-3">Info Halaman</div>
             <div className="space-y-2 text-sm">
@@ -856,16 +1107,18 @@ export default function AccountProfile() {
               </div>
             </div>
           </Card>
-          {/* TOC (Daftar Isi) — only template sections, with expand/collapse */}
           <Card className="p-4">
             {(() => {
-              const items = [
+                const items = [
                 { id: 'template-company', label: 'Company Demographics', icon: FaUsers },
+                { id: 'template-org-structure', label: 'Organization Structure', icon: FaSitemap },
                 { id: 'template-personnel', label: 'Key Personnel', icon: FiUser },
                 { id: 'template-products', label: 'Telkom Products & Services', icon: FaBoxOpen },
                 { id: 'template-service', label: 'Telkom Service Performance', icon: FaChartBar },
                 { id: 'template-competitor', label: 'Competitor Landscape', icon: FaBalanceScale },
-                { id: 'template-strategic', label: 'Strategic Analysis', icon: FaProjectDiagram },
+                { id: 'template-fiveforces', label: 'Five Forces', icon: FaProjectDiagram },
+                { id: 'template-swot', label: 'SWOT Analysis', icon: FaLightbulb },
+                { id: 'template-artifacts', label: 'Artifacts', icon: FaNetworkWired },
               ]
               const ids = items.map(i => i.id)
               const allOpen = ids.every((id) => !collapsed[id])
@@ -876,8 +1129,8 @@ export default function AccountProfile() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-800">Daftar Isi</div>
                     <div className="flex items-center gap-2">
-                      <Button variant="secondary" size="sm" onClick={addNewSection}><FiPlus className="w-4 h-4" /> New</Button>
-                      <Button variant="secondary" size="sm" onClick={toggleAll}>{label}</Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={addNewSection}><FiPlus className="w-4 h-4" /> New</Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={toggleAll}>{label}</Button>
                     </div>
                   </div>
                   <ul className="space-y-2">

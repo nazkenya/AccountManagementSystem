@@ -7,23 +7,26 @@ import RequireRole from './auth/RequireRole'
 
 export default function App() {
   return (
-    <Routes>
-      {/* Public routes */}
-      {routes.filter(r => r.public).map(r => (
-        <Route key={r.path} path={r.path} element={r.element} />
-      ))}
+    // NEW: one wrapper that scales the whole app
+    <div className="app-zoom-90">
+      <Routes>
+        {/* Public routes */}
+        {routes.filter(r => r.public).map(r => (
+          <Route key={r.path} path={r.path} element={r.element} />
+        ))}
 
-      {/* Protected routes with layout */}
-      <Route element={<Layout />}>
-        <Route element={<RequireAuth />}>
-          {routes.filter(r => !r.public).map(r => (
-            <Route key={r.path} element={<RequireRole allowed={r.roles} />}>
-              <Route path={r.path} element={r.element} />
-            </Route>
-          ))}
-          <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Protected routes with layout */}
+        <Route element={<Layout />}>
+          <Route element={<RequireAuth />}>
+            {routes.filter(r => !r.public).map(r => (
+              <Route key={r.path} element={<RequireRole allowed={r.roles} />}>
+                <Route path={r.path} element={r.element} />
+              </Route>
+            ))}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
+    </div>
   )
 }

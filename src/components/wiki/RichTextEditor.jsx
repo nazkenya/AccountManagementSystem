@@ -18,7 +18,7 @@ function RichTextEditorImpl({
   const quillRef = React.useRef(null)
   const imageInputRef = React.useRef(null)
   const fileInputRef = React.useRef(null)
-  const [selectedImage, setSelectedImage] = React.useState(null)
+  const [_selectedImage, setSelectedImage] = React.useState(null)
 
   // Keep the latest onChange without recreating the handler
   const onChangeRef = React.useRef(onChange)
@@ -224,7 +224,7 @@ function SetToolbarTitles() {
             tbl.innerHTML = "<svg viewBox='0 0 24 24' width='16' height='16' xmlns='http://www.w3.org/2000/svg'><rect class='ql-stroke' x='3' y='3' width='18' height='18' rx='2' ry='2' fill='none'/><path class='ql-stroke' d='M3 9h18M9 3v18'/></svg>"
           }
         }
-        const chk = el.querySelector('button.ql-list[value=\"check\"]')
+            const chk = el.querySelector('button.ql-list[value="check"]')
         if (chk) {
           chk.setAttribute('title', 'Checklist')
           if (!chk.querySelector('svg')) {

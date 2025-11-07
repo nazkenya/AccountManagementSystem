@@ -74,7 +74,7 @@ export default function Sidebar() {
   }
 
   return (
-    <nav className="fixed left-0 top-0 w-[260px] h-[100dvh] bg-[#0F162A] text-white/80 flex flex-col py-4 shrink-0 overflow-hidden z-40">
+    <nav className="fixed left-0 top-0 w-[240px] h-[100dvh] bg-[#0F162A] text-white/80 flex flex-col py-4 shrink-0 overflow-hidden z-40">
       {/* Brand Row */}
       <div className="px-4 mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
