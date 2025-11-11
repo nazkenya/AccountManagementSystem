@@ -9,4 +9,4 @@ export const ROLES = {
 }
 
 // Flat list of all role values for dropdowns and validation
-export const ALL_ROLES = Object.values(ROLES)
+export const ALL_ROLES = ['admin', 'manager', 'sales', 'viewer'];

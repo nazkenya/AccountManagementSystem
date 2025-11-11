@@ -108,7 +108,7 @@ export async function fetchTEMP() {
     console.error("fetchTEMP error:", err);
     return [];
   }
-}
+} 
 
 /* ----------------------
    LOG fetch

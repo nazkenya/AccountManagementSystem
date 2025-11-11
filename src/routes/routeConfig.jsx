@@ -11,15 +11,14 @@ import AmProfile from '../pages/Profile/AmProfile'
 import { ROLES } from '../auth/roles'
 
 export const routes = [
-  { path: '/login', element: <Login />, public: true },
-  { path: '/403', element: <NotAuthorized />, public: true },
+  { path: '/login', element: <Login />, public: true },
+  { path: '/403', element: <NotAuthorized />, public: true },
 
-  { path: '/', element: <Dashboard />, roles: [ROLES.admin, ROLES.sales, ROLES.viewer, ROLES.manager] },
-  { path: '/customers', element: <CustomersPage />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
-  { path: '/customers/:id', element: <CustomerDetail />, roles: [ROLES.sales] },
-  { path: '/customers/:id/account-profile', element: <AccountProfile />, roles: [ROLES.sales] },
+  { path: '/', element: <Dashboard />, roles: [ROLES.admin, ROLES.sales, ROLES.viewer, ROLES.manager] },
+  { path: '/customers', element: <CustomersPage />, roles: [ROLES.admin, ROLES.sales, ROLES.manager] },
+  { path: '/customers/:id', element: <CustomerDetail />, roles: [ROLES.sales] },
+  { path: '/customers/:id/account-profile', element: <AccountProfile />, roles: [ROLES.sales] },
   { path: '/ecrm-workspace', element: <EcrmWorkspace />, roles: [ROLES.manager, ROLES.admin] },
-  { path: '/ecrm-workspace/validation', element: <ValidationPage />, roles: [ROLES.manager, ROLES.admin] },
-  { path: '/profile/am', element: <AmProfile />, roles: [ROLES.manager, ROLES.admin] },
-  
+  { path: '/ecrm-workspace/validation', element: <ValidationPage />, roles: [ROLES.manager, ROLES.admin] },
+  { path: '/profile/am', element: <AmProfile />, roles: [ROLES.manager, ROLES.admin] },
 ]

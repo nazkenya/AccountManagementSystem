@@ -1,18 +1,34 @@
 // src/services/amService.js
-import axios from "axios";
+import api from "../api";
 
-const api = axios.create({
-  baseURL: "http://localhost:8000/api", // ganti sesuai URL backend Laravel kamu
-});
-
-// Fungsi ambil data AM
-export async function getAMs() {
+/**
+ * Ambil data daftar Account Manager (AM)
+ * @param {Array} fields - daftar kolom yang ingin diambil (opsional)
+ * @returns {Promise<Array>}
+ */
+export async function getAMs(fields = []) {
   try {
-    const response = await api.get("/am"); // pastikan route Laravel kamu: Route::get('/ams', ...)
-    console.log("✅ Data AM dari backend:", response.data);
-    return response.data;
+    // Param untuk filter kolom jika digunakan
+    const params = {};
+    if (fields.length > 0) {
+      params.fields = fields.join(",");
+    }
+
+    const response = await api.get("/am", { params });
+
+    if (response.data && Array.isArray(response.data.data)) {
+      return response.data.data;
+    }
+
+    // Fallback kalau struktur API berubah
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    console.warn("Format response tidak dikenali:", response.data);
+    return [];
   } catch (error) {
-    console.error("❌ Gagal fetch data AM:", error);
+    console.error("❌ Gagal mengambil data AM:", error);
     return [];
   }
 }

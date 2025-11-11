@@ -1,11 +1,20 @@
 import React from 'react'
-import ReactDOM from 'react-dom/client'
+import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import './index.css'
 import { AuthProvider } from './auth/AuthContext'
+import './index.css'
+import { setAuthToken } from "./api"  
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const saved = localStorage.getItem('auth.user')
+if (saved) {
+  const data = JSON.parse(saved)
+  setAuthToken(data.token) 
+}
+
+const root = createRoot(document.getElementById('root'))
+
+root.render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>

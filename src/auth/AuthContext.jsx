@@ -1,76 +1,97 @@
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
-import { ALL_ROLES } from './roles'
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { setAuthToken } from '../api'
 
 const STORAGE_KEY = 'auth.user'
+const API_URL = 'http://localhost:8000/api'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Load from localStorage on boot
   useEffect(() => {
-    try {
+    async function bootstrap() {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setUser(JSON.parse(raw))
-    } catch {
-      // ignore corrupted storage
+      if (!raw) return setLoading(false)
+
+      const stored = JSON.parse(raw)
+      if (!stored?.token) return setLoading(false)
+
+      setAuthToken(stored.token)
+
+      try {
+        const res = await fetch(`${API_URL}/user`, {
+          headers: { Authorization: `Bearer ${stored.token}` },
+        })
+
+        if (!res.ok) throw new Error()
+
+        const data = await res.json()
+        setUser({ ...stored, role: data.role })
+      } catch {
+        localStorage.removeItem(STORAGE_KEY)
+      }
+
+      setLoading(false)
     }
-    setLoading(false)
+    bootstrap()
   }, [])
 
-  // Persist to localStorage when user changes
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
-    } else {
-      localStorage.removeItem(STORAGE_KEY)
-    }
-  }, [user])
+  async function login({ username, password }) {
+    const res = await fetch(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
 
-  // Fake login without backend
-  async function login({ username, role }) {
-    if (!username) throw new Error('Username required')
-    if (!ALL_ROLES.includes(role)) throw new Error('Invalid role')
-    const me = { id: crypto.randomUUID(), name: username, role }
+    if (!res.ok) throw new Error('Login gagal. Periksa username/password')
+
+    const data = await res.json()
+
+    const me = {
+      id: data.user.id,
+      username: data.user.username,
+      role: data.user.role,
+      token: data.token,
+    }
+
+    setAuthToken(me.token)
     setUser(me)
-    return me
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(me))
   }
 
   async function logout() {
+    try {
+      await fetch(`${API_URL}/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${user?.token}` },
+      })
+    } catch (e) {}
+
+    setAuthToken(null)
     setUser(null)
+    localStorage.removeItem(STORAGE_KEY)
   }
 
-  const switchRole = useCallback((role) => {
-    if (!user) return
-    if (!ALL_ROLES.includes(role)) return
-    setUser((prev) => (prev ? { ...prev, role } : prev))
-  }, [user])
+  const hasRole = (roles) =>
+    user?.role && (Array.isArray(roles) ? roles : [roles]).includes(user.role)
 
   const value = useMemo(
     () => ({
       user,
-      role: user?.role || null,
+      role: user?.role,
       loading,
       login,
       logout,
-      switchRole,
       isAuthenticated: !!user,
-      hasRole: (allowed) => {
-        if (!user?.role) return false
-        const arr = Array.isArray(allowed) ? allowed : [allowed]
-        return arr.includes(user.role)
-      },
+      hasRole,
     }),
-    [user, loading, switchRole]
+    [user, loading]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
+  return useContext(AuthContext)
 }
