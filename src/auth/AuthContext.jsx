@@ -10,32 +10,54 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function bootstrap() {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return setLoading(false)
-
-      const stored = JSON.parse(raw)
-      if (!stored?.token) return setLoading(false)
-
-      setAuthToken(stored.token)
-
-      try {
-        const res = await fetch(`${API_URL}/user`, {
-          headers: { Authorization: `Bearer ${stored.token}` },
-        })
-
-        if (!res.ok) throw new Error()
-
-        const data = await res.json()
-        setUser({ ...stored, role: data.role })
-      } catch {
-        localStorage.removeItem(STORAGE_KEY)
-      }
-
-      setLoading(false)
+  async function bootstrap() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      setLoading(false);
+      return;
     }
-    bootstrap()
-  }, [])
+
+    let stored = null;
+    try {
+      stored = JSON.parse(raw);
+    } catch (e) {
+      console.warn('[AuthProvider] gagal parse auth.user:', e);
+      localStorage.removeItem(STORAGE_KEY);
+      setLoading(false);
+      return;
+    }
+
+    if (!stored?.token) {
+      console.warn('[AuthProvider] tidak ada token di auth.user');
+      localStorage.removeItem(STORAGE_KEY);
+      setLoading(false);
+      return;
+    }
+
+    try { localStorage.removeItem('token'); } catch (e) {}
+    try { localStorage.removeItem('auth.token'); } catch (e) {}
+
+    setAuthToken(stored.token);
+
+    try {
+      const res = await fetch(`${API_URL}/user`, {
+        headers: { Authorization: `Bearer ${stored.token}` },
+      });
+
+      if (!res.ok) throw new Error('fetch user gagal');
+
+      const data = await res.json();
+      setUser({ ...stored, role: data.role });
+    } catch (err) {
+      console.warn('[AuthProvider] gagal verifikasi token:', err);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    setLoading(false);
+  }
+
+  bootstrap();
+}, []);
 
   async function login({ username, password }) {
     const res = await fetch(`${API_URL}/login`, {

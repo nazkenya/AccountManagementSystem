@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "axion": "^0.1.0",
-    "axios": "^1.12.2",
+    "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "quill": "^2.0.3",
