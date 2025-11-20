@@ -68,12 +68,29 @@ class AuthController extends Controller
         $row = DB::table('personal_access_tokens')->where('token', $hashed)->first();
         if (!$row) return response()->json(['message' => 'Invalid token'], 401);
 
+        // Cari user dengan fallback ke beberapa nama kolom id
         $user = DB::table('USERS')->where('USER_ID', $row->user_id)->first();
+        if (!$user) {
+            $user = DB::table('USERS')->where('user_id', $row->user_id)->first();
+        }
+        if (!$user) {
+            $user = DB::table('USERS')->where('USERID', $row->user_id)->first();
+        }
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $uid = $user->USER_ID ?? $user->user_id ?? $user->USERID ?? null;
+        $username = $user->USERNAME ?? $user->username ?? null;
+        $roleDb = $user->ROLE ?? $user->role ?? null;
+        $roleLower = $roleDb ? strtolower(trim($roleDb)) : null;
+        $roleUpper = $roleDb ? strtoupper(trim($roleDb)) : null;
 
         return response()->json([
-            'id' => $user->USER_ID,
-            'username' => $user->USERNAME,
-            'role' => $user->ROLE
+            'id' => $uid,
+            'username' => $username,
+            'role' => $roleLower,
+            'ROLE' => $roleUpper
         ]);
     }
 

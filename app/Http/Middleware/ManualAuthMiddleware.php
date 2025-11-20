@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -40,17 +41,57 @@ class ManualAuthMiddleware
             return response()->json(['message' => 'Unauthorized (invalid token)'], 401);
         }
 
+        // ambil user berdasarkan row->user_id (row->user_id seharusnya berisi USER_ID)
         $user = DB::table('USERS')->where('USER_ID', $row->user_id)->first();
+
+        if (!$user) {
+            // fallback: coba beberapa field id jika database tidak konsisten
+            $user = DB::table('USERS')->where('USERID', $row->user_id)->first()
+                ?? DB::table('USERS')->where('user_id', $row->user_id)->first();
+        }
+
         if (!$user) {
             Log::warning('ManualAuthMiddleware - user not found for token', ['user_id' => $row->user_id]);
             return response()->json(['message' => 'Unauthorized (user not found)'], 401);
         }
 
-        $request->setUserResolver(function() use ($user) {
-            return (object) $user;
-        });
+        // Normalisasi properti user ke array lalu build object yang memiliki alias properti
+        $userArr = (array) $user;
 
-        Log::info('ManualAuthMiddleware - auth ok', ['user_id' => $row->user_id, 'username' => $user->USERNAME ?? $user->username ?? null]);
+        // Resolve id/username/role dari berbagai kemungkinan kolom
+        $userId = $userArr['USER_ID'] ?? $userArr['user_id'] ?? $userArr['USERID'] ?? $userArr['id'] ?? null;
+        $username = $userArr['USERNAME'] ?? $userArr['username'] ?? $userArr['USER_NAME'] ?? null;
+        $roleDb = $userArr['ROLE'] ?? $userArr['role'] ?? $userArr['role_name'] ?? null;
+
+        // build user object with multiple aliases so controllers can access any variant
+        $userObj = (object) $userArr;
+
+        if ($userId) {
+            $userObj->USER_ID = $userId;
+            $userObj->user_id = $userId;
+        }
+
+        if ($username) {
+            $userObj->USERNAME = $username;
+            $userObj->username = $username;
+        }
+
+        if ($roleDb) {
+            $userObj->ROLE = strtoupper(trim($roleDb));
+            $userObj->role = strtolower(trim($roleDb));
+        }
+
+        // Set user resolver AND set attributes user for backward compatibility
+        $request->setUserResolver(function() use ($userObj) {
+            return $userObj;
+        });
+        $request->attributes->set('user', $userObj);
+
+        Log::info('ManualAuthMiddleware - auth ok', [
+            'user_id' => $userId,
+            'username' => $username,
+            'role' => ($userObj->ROLE ?? null),
+        ]);
 
         return $next($request);
     }

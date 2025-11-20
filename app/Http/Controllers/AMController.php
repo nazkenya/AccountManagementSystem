@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class AMController extends Controller
 {
-    // kolom yang diizinkan (masukkan variasi case agar aman)
     private $allowedColumns = [
         'ID_SALES','id_sales',
         'NIK_AM','nik_am',
@@ -17,7 +16,6 @@ class AMController extends Controller
         'TELDA','telda',
         'UPDATED_DATE','updated_date',
         'AM_AKTIF','am_aktif',
-        // kolom popover yang kamu mint
         'NOTEL','notel',
         'EMAIL','email',
         'LEVEL_AM','level_am',
