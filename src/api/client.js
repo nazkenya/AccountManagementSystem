@@ -15,12 +15,11 @@ export async function api(path, options = {}) {
 
   const finalOptions = {
     headers: { ...defaultHeaders, ...(options.headers || {}) },
-    credentials: options.credentials ?? 'include', // caller bisa override
+    credentials: options.credentials ?? 'include', 
     method: options.method || 'GET',
     ...options,
   }
 
-  // Pastikan body dikirim sebagai JSON string kecuali FormData
   if (finalOptions.body != null && typeof finalOptions.body !== 'string') {
     if (!(finalOptions.body instanceof FormData)) {
       finalOptions.body = JSON.stringify(finalOptions.body)
@@ -44,7 +43,7 @@ export async function api(path, options = {}) {
 
     const err = new Error(errorMessage)
     err.status = res.status
-    throw err
+    throw err                                                           
   }
 
   const ct = res.headers.get('content-type') || ''

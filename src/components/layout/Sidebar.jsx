@@ -1,3 +1,4 @@
+// src/components/layout/Sidebar.jsx
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
@@ -21,8 +22,15 @@ import {
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
 
-const MENU = {
-  base: [{ to: '/', label: 'Beranda', icon: FaHome }],
+/**
+ * MENU definition:
+ * - keep base (always visible)
+ * - roleMenus keyed by ROLES.* for specific roles
+ * - sharedGroups for menu blocks shared by multiple roles (manager/admin)
+ */
+const BASE_MENU = [{ to: '/', label: 'Beranda', icon: FaHome }]
+
+const ROLE_MENUS = {
   [ROLES.admin]: [
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
     { to: '/sales-funnel', label: 'Sales Funnel', icon: FaBullhorn },
@@ -37,33 +45,49 @@ const MENU = {
     { to: '/sales-funnel', label: 'Sales Funnel', icon: FaBullhorn },
     { to: '/aktivitas', label: 'Aktivitas', icon: FaChartLine },
   ],
-  [ROLES.viewer]: [
+  [ROLES.viewer]: [{ to: '/customers', label: 'Pelanggan', icon: FaUsers }],
+  [ROLES.staff]: [
+    // staff minimal akses ecrm workspace + pelanggan (sesuaikan sesuai kebutuhan)
+    { to: '/ecrm-workspace', label: 'ECRM Workspace', icon: FaUserTie },
     { to: '/customers', label: 'Pelanggan', icon: FaUsers },
-  ],
-  [ROLES.manager]: [
-    {
-      label: 'Update Data',
-      icon: FaFirefoxBrowser,
-
-      subMenu: [
-        { to: '/customers', label: 'Pelanggan', icon: FaUsers },
-        { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
-        { to: '/profile/am', label: 'Profile AM', icon: FaUserTie }, 
-        { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
-        { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
-      ],
-    },
   ],
 }
 
+// shared group menu (visible to either manager OR admin)
+const SHARED_GROUPS = [
+  {
+    // use a unique id/label as key
+    id: 'update-data',
+    label: 'Update Data',
+    icon: FaFirefoxBrowser,
+    rolesAllowed: [ROLES.manager, ROLES.admin, ROLES.staff],
+    subMenu: [
+      { to: '/customers', label: 'Pelanggan', icon: FaUsers },
+      { to: '/ecrm-workspace', label: 'Update AM', icon: FaChartLine },
+      { to: '/profile/am', label: 'Profile AM', icon: FaUserTie },
+      { to: '/produk', label: 'Produk & Solusi', icon: FaBoxOpen },
+      { to: '/monitoring', label: 'Monitoring Proses', icon: FaDesktop },
+    ],
+  },
+]
+
 export default function Sidebar() {
   const { role, logout } = useAuth()
-  const roleItems = MENU[role] || []
-  const items = [...MENU.base, ...roleItems]
+  const [openMenus, setOpenMenus] = useState({})
 
-  const [openMenus, setOpenMenus] = useState(() => {
-    return {}
-  })
+  // build items: base + role-specific + shared groups (if role allowed)
+  const roleItems = role && ROLE_MENUS[role] ? ROLE_MENUS[role] : []
+  const sharedItems = SHARED_GROUPS.filter((g) => g.rolesAllowed.includes(role))
+
+  // flatten sharedGroups into items that the component expects (either subMenu item or top item)
+  // we will put shared groups as items with `subMenu`
+  const items = [
+    ...BASE_MENU,
+    // role-items (top-level simple links)
+    ...roleItems,
+    // insert shared groups (collapsible)
+    ...sharedItems.map((g) => ({ label: g.label, icon: g.icon, subMenu: g.subMenu })),
+  ]
 
   const toggleMenu = (label) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }))
@@ -82,8 +106,8 @@ export default function Sidebar() {
             <div className="text-white/50 text-[11px]">Account Management System</div>
           </div>
         </div>
-        <FaChevronDown className="text-white/50" />
       </div>
+
       <div className="h-px bg-white/10 mx-4" />
 
       {/* Section heading with actions */}
@@ -98,7 +122,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <ul className="flex-1 mt-1">
         {items.map((item) => {
-          // jika item memiliki subMenu -> render sebagai collapsible menu
+          // collapse menu (has subMenu)
           if (item.subMenu && Array.isArray(item.subMenu)) {
             const isOpen = !!openMenus[item.label]
             const ParentIcon = item.icon
@@ -112,9 +136,7 @@ export default function Sidebar() {
                 >
                   <ParentIcon className="w-5 h-5 text-white/75 group-hover:text-white" />
                   <span className="text-[14px]">{item.label}</span>
-                  <FaChevronDown
-                    className={`ml-auto w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'} text-white/60`}
-                  />
+                  <FaChevronDown className={`ml-auto w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'} text-white/60`} />
                 </button>
 
                 {/* submenu */}
@@ -145,7 +167,7 @@ export default function Sidebar() {
             )
           }
 
-          // default render (item biasa tanpa subMenu)
+          // default render (top-level single link)
           const Icon = item.icon
           const showBadge = item.label === 'Aktivitas'
           return (

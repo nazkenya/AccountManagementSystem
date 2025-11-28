@@ -8,8 +8,17 @@ import { setAuthToken } from "./api"
 
 const saved = localStorage.getItem('auth.user')
 if (saved) {
-  const data = JSON.parse(saved)
-  setAuthToken(data.token) 
+  let data = null
+  try {
+    data = JSON.parse(saved)
+  } catch (e) {
+    console.warn('[main] gagal parse saved auth.user:', e)
+  }
+  if (data && data.token) {
+    setAuthToken(data.token)
+  } else {
+    console.debug('[main] no valid auth.user token found in localStorage')
+  }
 }
 
 const root = createRoot(document.getElementById('root'))

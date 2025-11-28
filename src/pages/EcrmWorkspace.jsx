@@ -1,4 +1,4 @@
-// src/pages/EcrmWorkspace.jsx (Sudah dimodifikasi)
+// src/pages/EcrmWorkspace.jsx
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -9,7 +9,7 @@ import {
   FaFilter,
   FaShieldAlt,
   FaArrowRight,
-  FaPlus, // <-- 1. ICON BARU DITAMBAHKAN
+  FaPlus,
 } from "react-icons/fa";
 import { getAMs } from "../services/amService";
 import SearchInput from "../components/ui/SearchInput";
@@ -18,12 +18,12 @@ import Pagination from "../components/ui/Pagination";
 import Card from "../components/ui/Card";
 import StatsCard from "../components/ui/StatsCard";
 import Select from "../components/ui/Select";
-import Button from "../components/ui/Button"; // <-- Anda sudah punya ini
+import Button from "../components/ui/Button";
 import PageHeader from "../components/ui/PageHeader";
 import { useNavigate } from "react-router-dom";
 
-// 2. IMPORT MODAL BARU DARI DALAM FOLDER
-import InsertAmModal from "./EcrmWorkspace/InsertAmModal"; 
+// Modal import
+import InsertAmModal from "./EcrmWorkspace/InsertAmModal";
 
 export default function EcrmWorkspace() {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ export default function EcrmWorkspace() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
 
-  // 3. STATE BARU UNTUK MODAL
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Hover/popover state
@@ -50,7 +50,7 @@ export default function EcrmWorkspace() {
   // constant for "no region"
   const NO_REGION_VALUE = "__NO_REGION__";
 
-  // POPOVER FIELDS (Akan kita gunakan untuk modal)
+  // POPOVER FIELDS
   const POPOVER_FIELDS = [
     { key: "notel", label: "No. Telp" },
     { key: "email", label: "Email" },
@@ -72,15 +72,47 @@ export default function EcrmWorkspace() {
     return "";
   };
 
+  // --- normalize status helper
+  const normalizeStatus = (val) => {
+    const s = String(val ?? "").trim().toLowerCase();
+
+    // common active variants
+    if (["aktif", "active", "y", "yes", "1", "true", "ya"].includes(s)) return "aktif";
+
+    // hold variants
+    if (["hold", "on hold", "on-hold", "onhold", "h"].includes(s)) return "hold";
+
+    // non aktif variants (space / dash / no-space)
+    if (["non aktif", "non-aktif", "nonaktif", "non_aktif", "nonaktif"].includes(s)) return "non_aktif";
+
+    // If empty or unknown, treat as non_aktif (safer)
+    if (s === "" || s === "null" || s === "undefined") return "non_aktif";
+
+    // fallback: if not in lists, try mapping words
+    if (s.includes("hold")) return "hold";
+    if (s.includes("non") || s.includes("inactive") || s.includes("nonaktif") || s.includes("non-aktif")) return "non_aktif";
+    if (s.includes("aktif") || s.includes("active")) return "aktif";
+
+    return "non_aktif";
+  };
+
+  // helper: get raw active value from row (support multiple column names)
+  const getRawActive = (row) => {
+    return (
+      getFieldValue(row, "AM_AKTIF") ??
+      getFieldValue(row, "am_aktif") ??
+      getFieldValue(row, "am_aktif_posisi_oktober_2025") ??
+      ""
+    );
+  };
+
   // Fetch data
   useEffect(() => {
     setLoading(true);
 
     const tableCols = ["id_sales", "nik_am", "nama_am", "tr", "witel"];
     const popCols = POPOVER_FIELDS.map((f) => f.key);
-    const fields = Array.from(
-      new Set([...tableCols, ...popCols, "am_aktif"])
-    ); // include active flag
+    const fields = Array.from(new Set([...tableCols, ...popCols, "am_aktif"])); // include active flag
 
     getAMs(fields)
       .then((data) => {
@@ -95,17 +127,15 @@ export default function EcrmWorkspace() {
         setAms([]);
       })
       .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Unique lists (regions + witels)
   const regions = useMemo(() => {
     const list = ams
       .map((m) => {
-        // prefer uppercase DB keys if present, fallback lower
         const v = getFieldValue(m, "TR") ?? getFieldValue(m, "tr") ?? "";
         return String(v ?? "").trim();
       })
-      // hanya region valid (buang null/"null"/"undefined"/empty)
       .filter((v) => v && v.toLowerCase() !== "null" && v.toLowerCase() !== "undefined");
     return [...new Set(list)].sort((a, b) => a.localeCompare(b, "id"));
   }, [ams]);
@@ -131,18 +161,13 @@ export default function EcrmWorkspace() {
       const nik = getFieldValue(m, "NIK_AM") ?? getFieldValue(m, "nik_am") ?? "";
       const id = getFieldValue(m, "ID_SALES") ?? getFieldValue(m, "id_sales") ?? "";
 
-      // ambil nilai flag aktif (coba beberapa variasi key)
-      const rawActive =
-        getFieldValue(m, "AM_AKTIF") ??
-        getFieldValue(m, "am_aktif") ??
-        "";
-
-      const activeNormalized = String(rawActive).trim().toLowerCase(); // mis. "AKTIF" -> "aktif"
+      // raw active value and normalized
+      const rawActive = getRawActive(m);
+      const statusNormalized = normalizeStatus(rawActive); // "aktif" | "hold" | "non_aktif"
 
       // filter by region
       if (filter.region) {
         if (filter.region === NO_REGION_VALUE) {
-          // pilih baris yang TR kosong / 'null' / 'undefined'
           const rv = String(region ?? "").trim().toLowerCase();
           if (rv !== "" && rv !== "null" && rv !== "undefined") return false;
         } else {
@@ -153,18 +178,10 @@ export default function EcrmWorkspace() {
       // filter by witel
       if (filter.witel && witel !== filter.witel) return false;
 
-      // filter status: "" (all), "aktif", "non_aktif"
-      if (
-        filter.status === "aktif" &&
-        !["aktif", "y", "yes", "1", "true", "active", "ya"].includes(activeNormalized)
-      ) {
-        return false;
-      }
-      if (
-        filter.status === "non_aktif" &&
-        ["aktif", "y", "yes", "1", "true", "active", "ya"].includes(activeNormalized)
-      ) {
-        return false;
+      // filter by status: compare normalized tokens
+      if (filter.status) {
+        // filter.status values we use: "aktif", "hold", "non_aktif"
+        if (filter.status !== statusNormalized) return false;
       }
 
       // text search
@@ -180,6 +197,19 @@ export default function EcrmWorkspace() {
       return true;
     });
   }, [filter, ams]);
+
+  // ---- status normalization & visible counts (based on filtered data) ----
+  const visibleStatusCounts = useMemo(() => {
+    const counts = { aktif: 0, hold: 0, non_aktif: 0 };
+    (filtered || []).forEach((r) => {
+      const raw = getRawActive(r);
+      const cat = normalizeStatus(raw);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [filtered]);
+
+  const totalVisible = filtered.length;
 
   // Pagination
   const total = filtered.length;
@@ -209,22 +239,14 @@ export default function EcrmWorkspace() {
     { key: "WITEL", label: "WITEL", render: (row) => getFieldValue(row, "WITEL") || getFieldValue(row, "witel") },
   ];
 
-  // Hitung hanya AM yang aktif (berdasarkan kolom AM_AKTIF_POSISI_OKTOBER_2025)
-  const activeFilteredCount = filtered.filter((r) => {
-    const val =
-      getFieldValue(r, "AM_AKTIF") ??
-      getFieldValue(r, "am_aktif") ??
-      getFieldValue(r, "AM_AKTIF") ??
-      getFieldValue(r, "am_aktif");
-
-    if (val === undefined || val === null) return false;
-    const s = String(val).trim().toLowerCase();
-    return ["y", "yes", "1", "true", "active", "aktif", "ya"].includes(s);
-  }).length;
-
-  // Stats (gunakan activeFilteredCount)
+  // Stats (show breakdown + regions/witels)
   const stats = [
-    { label: "Total Active Account Managers", value: activeFilteredCount.toLocaleString(), icon: FaUserTie },
+    { label: "Total (Visible)", value: totalVisible.toLocaleString(), icon: FaUserTie },
+    { label: "Aktif (Visible)", value: visibleStatusCounts.aktif.toString(), icon: FaShieldAlt },
+    { label: "Hold (Visible)", value: visibleStatusCounts.hold.toString(), icon: FaMapMarkerAlt },
+
+    { label: "Non Aktif (Visible)", value: visibleStatusCounts.non_aktif.toString(), icon: FaBuilding },
+
     { label: "Regions", value: regions.length.toString(), icon: FaMapMarkerAlt },
     { label: "Witels", value: witels.length.toString(), icon: FaBuilding },
   ];
@@ -367,7 +389,7 @@ export default function EcrmWorkspace() {
     return d.toLocaleDateString();
   };
 
-  // ----------------- Export functionality (filtered -> XLSX) -----------------
+  // EXPORT
   const EXPORT_FIELDS = [
     { key: "id_sales", label: "ID SALES" },
     { key: "nik_am", label: "NIK AM" },
@@ -376,7 +398,7 @@ export default function EcrmWorkspace() {
     { key: "witel", label: "Witel" },
     // popover fields
     ...POPOVER_FIELDS,
-    // active flag
+    // active flag (we will compute normalized value)
     { key: "am_aktif_posisi_oktober_2025", label: "AM Aktif" },
   ];
 
@@ -387,15 +409,21 @@ export default function EcrmWorkspace() {
       return;
     }
 
-    // dynamic import xlsx supaya bundle tidak langsung besar
     const XLSX = await import("xlsx");
 
-    // map rows -> array of objects keyed by label (header)
     const sheetData = rowsToExport.map((r) => {
       const obj = {};
       EXPORT_FIELDS.forEach((f) => {
-        const raw = getFieldValue(r, f.key);
-        obj[f.label] = raw === null || raw === undefined ? "" : raw;
+        // For active column, use normalized label for consistency
+        if (f.label === "AM Aktif" || (String(f.key).toLowerCase().includes("am_aktif"))) {
+          const raw = getRawActive(r);
+          const norm = normalizeStatus(raw);
+          // present nicer text on excel: "Aktif" / "Hold" / "Non Aktif"
+          obj[f.label] = norm === "aktif" ? "Aktif" : norm === "hold" ? "Hold" : "Non Aktif";
+        } else {
+          const raw = getFieldValue(r, f.key);
+          obj[f.label] = raw === null || raw === undefined ? "" : raw;
+        }
       });
       return obj;
     });
@@ -411,10 +439,8 @@ export default function EcrmWorkspace() {
     filenameParts.push(new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-"));
     const filename = `${filenameParts.join("_")}.xlsx`;
 
-    // write file (browser)
     XLSX.writeFile(wb, filename);
   };
-  // ---------------------------------------------------------------------------
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -427,7 +453,16 @@ export default function EcrmWorkspace() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        {stats.map((s, i) => (
+        {stats.slice(0, 3).map((s, i) => (
+          <div key={i} className="animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
+            <StatsCard {...s} />
+          </div>
+        ))}
+      </div>
+
+      {/* Extra small stats row (Regions / Witels) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        {stats.slice(3).map((s, i) => (
           <div key={i} className="animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
             <StatsCard {...s} />
           </div>
@@ -454,12 +489,11 @@ export default function EcrmWorkspace() {
           </Button>
         </div>
       </Card>
-      
-      {/* 4. CARD BARU UNTUK INSERT AM DITAMBAHKAN DI SINI */}
+
+      {/* Insert AM */}
       <Card className="bg-white">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            {/* Menggunakan icon dan warna yang berbeda agar unik */}
             <div className="w-12 h-12 rounded-xl bg-[#E0F2FE] text-[#0284C7] grid place-items-center ring-1 ring-[#0284C7]/20">
               <FaPlus className="text-xl" />
             </div>
@@ -470,20 +504,12 @@ export default function EcrmWorkspace() {
               </p>
             </div>
           </div>
-          {/* Tombol ini akan membuka modal. Menggunakan style yg sama dg "Start Validation" */}
-          <Button 
-            variant="primary" 
-            size="lg" 
-            className="w-full md:w-auto" 
-            onClick={() => setIsModalOpen(true)}
-          >
+          <Button variant="primary" size="lg" className="w-full md:w-auto" onClick={() => setIsModalOpen(true)}>
             Insert AM
             <FaArrowRight />
           </Button>
         </div>
       </Card>
-      {/* ---------------------------------------------------- */}
-
 
       {/* Filter */}
       <Card className="bg-white">
@@ -494,16 +520,9 @@ export default function EcrmWorkspace() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
-            <SearchInput
-              value={filter.q}
-              onChange={(v) => setFilter((s) => ({ ...s, q: v }))}
-              placeholder="Search ID, NIK or Name..."
-            />
+            <SearchInput value={filter.q} onChange={(v) => setFilter((s) => ({ ...s, q: v }))} placeholder="Search ID, NIK or Name..." />
 
-            <Select
-              value={filter.region}
-              onChange={(e) => setFilter((s) => ({ ...s, region: e.target.value }))}
-            >
+            <Select value={filter.region} onChange={(e) => setFilter((s) => ({ ...s, region: e.target.value }))}>
               <option value="">All Regions</option>
               <option value={NO_REGION_VALUE}>Tidak Ada Regions</option>
               {regions.length === 0 ? (
@@ -519,10 +538,7 @@ export default function EcrmWorkspace() {
               )}
             </Select>
 
-            <Select
-              value={filter.witel}
-              onChange={(e) => setFilter((s) => ({ ...s, witel: e.target.value }))}
-            >
+            <Select value={filter.witel} onChange={(e) => setFilter((s) => ({ ...s, witel: e.target.value }))}>
               <option value="">All Witels</option>
               {witels.map((w) => (
                 <option key={w} value={w}>
@@ -532,12 +548,10 @@ export default function EcrmWorkspace() {
             </Select>
 
             {/* Dropdown filter: Status AM */}
-            <Select
-              value={filter.status}
-              onChange={(e) => setFilter((s) => ({ ...s, status: e.target.value }))}
-            >
+            <Select value={filter.status} onChange={(e) => setFilter((s) => ({ ...s, status: e.target.value }))}>
               <option value="">All Status</option>
               <option value="aktif">Aktif</option>
+              <option value="hold">Hold</option>
               <option value="non_aktif">Non Aktif</option>
             </Select>
           </div>
@@ -590,7 +604,7 @@ export default function EcrmWorkspace() {
             {POPOVER_FIELDS.map(({ key, label }) => {
               const raw = getFieldValue(hoveredRow, key) ?? "";
               const displayDateKeys = ["tgl_aktif", "tgl_akhir_kontrak_pro_hire", "tgl_out_sebagai_am"];
-              const display = displayDateKeys.includes(key) ? formatDateMaybe(raw) : (raw === "" || raw === null ? "-" : String(raw));
+              const display = displayDateKeys.includes(key) ? formatDateMaybe(raw) : raw === "" || raw === null ? "-" : String(raw);
               return (
                 <div key={key} className="flex justify-between gap-3">
                   <div className="text-gray-500 truncate pr-2">{label}</div>
@@ -598,6 +612,13 @@ export default function EcrmWorkspace() {
                 </div>
               );
             })}
+            {/* show normalized AM Aktif as well */}
+            <div className="flex justify-between gap-3">
+              <div className="text-gray-500 truncate pr-2">AM Aktif (status)</div>
+              <div className="text-gray-800 font-medium text-right truncate max-w-[160px]">
+                {normalizeStatus(getRawActive(hoveredRow)) === "aktif" ? "Aktif" : normalizeStatus(getRawActive(hoveredRow)) === "hold" ? "Hold" : "Non Aktif"}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -623,14 +644,8 @@ export default function EcrmWorkspace() {
         </div>
       </Card>
 
-      {/* 5. KOMPONEN MODAL BARU DIPANGGIL DI SINI */}
-      <InsertAmModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        fields={POPOVER_FIELDS}
-      />
-      {/* ------------------------------------------- */}
-
+      {/* InsertAm Modal */}
+      <InsertAmModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} fields={POPOVER_FIELDS} />
     </div>
   );
 }
